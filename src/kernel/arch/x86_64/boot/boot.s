@@ -2,14 +2,14 @@
 
 section .text
     global _start
-    extern kernel_main
+    extern kmain
 
 _start:
     ; Setup dello stack
     mov rsp, stack_top
     and rsp, -16        ; Stack alignment a 16 byte (SysV ABI)
 
-    call kernel_main    ; Entra nel C kernel
+    call kmain    ; Entra nel C kernel
 
     cli
 .halt:

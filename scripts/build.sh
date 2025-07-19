@@ -11,7 +11,7 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 echo "[+] Compilo arch/x86_64..."
-make -C src/arch/x86_64
+#make -C src/kernel/arch/x86_64
 
 echo "[+] Compilo kernel..."
 make -C src/kernel KERNEL_ELF="$(pwd)/$KERNEL_ELF"

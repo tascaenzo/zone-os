@@ -164,4 +164,4 @@ Questo progetto è rilasciato sotto licenza MIT.
 
 ---
 
-**Zone OS** - Sviluppato con ❤️ da Enzo
+**Zone OS** - Sviluppato con ❤️ da Enzo Tasca

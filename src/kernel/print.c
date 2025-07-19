@@ -1,11 +1,10 @@
-#include "limine.h"
-#include <stdint.h>
-#include <stddef.h>
+/* #include "limine.h"
+#include <lib/stddef.h>
+#include <lib/stdint.h>
 
 // Richiesta framebuffer Limine
 __attribute__((used)) static volatile struct limine_framebuffer_request framebuffer_request = {
-    .id = LIMINE_FRAMEBUFFER_REQUEST,
-    .revision = 0};
+    .id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
 
 // Font 8x8 ASCII (solo caratteri A-Z a-z 0-9 e base)
 static const uint8_t font[128][8] = {
@@ -19,36 +18,30 @@ static const uint8_t font[128][8] = {
     [' '] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
 };
 
-void put_char(uint32_t *fb, uint64_t pitch, uint64_t fb_width, uint64_t x, uint64_t y, char c, uint32_t color)
-{
+void put_char(uint32_t *fb, uint64_t pitch, uint64_t fb_width, uint64_t x, uint64_t y, char c,
+              uint32_t color) {
   if (c < 0 || c > 127)
     return;
-  for (int row = 0; row < 8; row++)
-  {
+  for (int row = 0; row < 8; row++) {
     uint8_t line = font[(int)c][row];
-    for (int col = 0; col < 8; col++)
-    {
-      if (line & (1 << (7 - col)))
-      {
+    for (int col = 0; col < 8; col++) {
+      if (line & (1 << (7 - col))) {
         fb[(y + row) * pitch / 4 + (x + col)] = color;
       }
     }
   }
 }
 
-void put_string(uint32_t *fb, uint64_t pitch, uint64_t fb_width, uint64_t x, uint64_t y, const char *s, uint32_t color)
-{
-  while (*s)
-  {
+void put_string(uint32_t *fb, uint64_t pitch, uint64_t fb_width, uint64_t x, uint64_t y,
+                const char *s, uint32_t color) {
+  while (*s) {
     put_char(fb, pitch, fb_width, x, y, *s++, color);
     x += 8;
   }
 }
 
-void init_print()
-{
-  if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1)
-  {
+void init_print() {
+  if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
     while (1)
       __asm__("hlt");
   }
@@ -57,14 +50,13 @@ void init_print()
   uint32_t *fb_ptr = (uint32_t *)fb->address;
 
   // Sfondo nero
-  for (uint64_t y = 0; y < fb->height; y++)
-  {
-    for (uint64_t x = 0; x < fb->width; x++)
-    {
+  for (uint64_t y = 0; y < fb->height; y++) {
+    for (uint64_t x = 0; x < fb->width; x++) {
       fb_ptr[y * fb->pitch / 4 + x] = 0x000000;
     }
   }
 
   // Stampa "Hello World"
-  put_string(fb_ptr, fb->pitch, fb->width, 50, 15, "Hello World!!", 0xFFFFFF);
+  put_string(fb_ptr, fb->pitch, fb->width, 15, 15, "Hello World!!", 0xFFFFFF);
 }
+ */
