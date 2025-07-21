@@ -1,7 +1,8 @@
 #include <bootloader/limine.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
-#include <lib/stdio.h> // ← Aggiunto per kprintf
+#include <klib/klog.h> // ← Aggiunto per klog
+#include <lib/stdio.h>
 
 // Richiesta framebuffer a Limine (OBBLIGATORIA)
 volatile struct limine_framebuffer_request framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
@@ -13,70 +14,56 @@ void kmain(void) {
   console_init();
   console_clear();
 
-  // === Test kprintf ===
-  kprintf("=== ZONE-OS Kernel ===\n");
-  kprintf("Framebuffer console ready!\n\n");
+  // === Test klog system ===
+  klog_info("ZONE-OS Kernel starting...");
+  klog_info("Framebuffer initialized: %ux%u @ %u bpp", (unsigned)fb->width, (unsigned)fb->height, (unsigned)fb->bpp);
 
-  // Test basic types
-  kprintf("Integer tests:\n");
-  kprintf("  Decimal: %d\n", 42);
-  kprintf("  Negative: %d\n", -123);
-  kprintf("  Unsigned: %u\n", 3000000000U);
-  kprintf("  Hex lower: 0x%x\n", 0xDEADBEEF);
-  kprintf("  Hex upper: 0x%X\n", 0xCAFEBABE);
-  kprintf("\n");
+  // Simuliamo il boot process con klog
+  klog_debug("Initializing kernel subsystems...");
+  klog_info("Console driver loaded successfully");
+  klog_info("Framebuffer driver loaded successfully");
 
-  // Test character and string
-  kprintf("Character tests:\n");
-  kprintf("  Single char: %c\n", 'A');
-  kprintf("  String: %s\n", "Hello, ZONE-OS!");
-  kprintf("  Null string: %s\n", (char *)0);
-  kprintf("\n");
+  // Test diversi livelli
+  klog_debug("This is a debug message (dettagli interni)");
+  klog_info("System boot progress: %d%% complete", 25);
+  klog_warn("Low memory warning: only %dMB available", 64);
+  klog_error("Failed to load optional module: %s", "network_driver");
 
-  // Test pointer
-  kprintf("Pointer tests:\n");
-  kprintf("  Function pointer: %p\n", (void *)kmain);
-  kprintf("  Framebuffer addr: %p\n", fb->address);
-  kprintf("  Stack variable: %p\n", (void *)&fb);
-  kprintf("\n");
+  kprintf("\n=== Switching to different log levels ===\n");
 
-  // Test special characters
-  kprintf("Special tests:\n");
-  kprintf("  Percent literal: 100%% complete\n");
-  kprintf("  Unknown spec: %z (should show %%z)\n");
-  kprintf("\n");
+  // Test filtraggio livelli
+  klog_info("Current log level: %d", klog_get_level());
 
-  // Test console functions
-  kprintf("Testing other I/O functions:\n");
-  kputs("  This is from kputs()");
-  kprintf("  Single char: ");
-  kputchar('X');
-  kputchar('\n');
-  kprintf("\n");
+  klog_info("Setting log level to WARN - debug and info will be filtered");
+  klog_set_level(KLOG_LEVEL_WARN);
 
-  // System info
-  kprintf("System Information:\n");
-  kprintf("  Framebuffer: %ux%u @ %u bpp\n", (unsigned)fb->width, (unsigned)fb->height, (unsigned)fb->bpp);
-  kprintf("  Memory pitch: %u bytes\n", (unsigned)fb->pitch);
-  kprintf("\n");
+  klog_debug("This debug message should NOT appear");
+  klog_info("This info message should NOT appear");
+  klog_warn("This warning SHOULD appear");
+  klog_error("This error SHOULD appear");
 
-  // Boot complete
-  kprintf("Boot sequence complete!\n");
-  kprintf("Kernel is running and ready.\n");
+  // Reset a livello normale
+  klog_set_level(KLOG_LEVEL_INFO);
+  klog_info("Log level reset to INFO");
 
-  // Original alphabet test
-  kprintf("\nAlphabet test:\n");
-  for (char c = 'A'; c <= 'Z'; c++) {
-    kputchar(c);
-  }
-  kputchar('\n');
+  kprintf("\n=== Testing KLOG_ASSERT macro ===\n");
 
-  for (char c = 'a'; c <= 'z'; c++) {
-    kputchar(c);
-  }
-  kputchar('\n');
+  // Test assert che passa
+  int test_value = 42;
+  KLOG_ASSERT(test_value == 42, "Test value should be 42, got %d", test_value);
+  klog_info("KLOG_ASSERT test passed!");
 
-  kprintf("\nKernel halted. System ready.\n");
+  // Test assert condizionale (commentato per non crashare)
+  // KLOG_ASSERT(test_value == 0, "This would trigger a panic!");
+
+  kprintf("\n=== Real-world kernel logging examples ===\n");
+
+  // Esempi realistici di logging kernel
+  klog_info("Memory manager: initializing heap at %p", (void *)0x100000);
+  klog_debug("Heap size: %zu bytes, alignment: %d", (size_t)1024 * 1024, 16);
+
+  klog_info("Interrupt controller: setting up IDT");
+  klog_debug("IDT base address: %p, limit: %u", (void *)0x50000, 256 * 8);
 
   while (1) {
     __asm__ volatile("hlt");

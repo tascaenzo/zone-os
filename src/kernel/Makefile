@@ -29,7 +29,7 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) $(LD_SCRIPT)
 # Compilazione C
 $(BUILD_DIR)/%.o: ./%.c
 	@mkdir -p $(dir $@)
-	clang -target x86_64-pc-none-elf -ffreestanding -nostdlib -nostdinc -I./include -c $< -o $@
+	clang -target x86_64-pc-none-elf -ffreestanding -nostdlib -nostdinc -mcmodel=kernel -DDEBUG -I./include -c $< -o $@
 
 # Compilazione ASM - .s
 $(BUILD_DIR)/%.o: ./%.s
