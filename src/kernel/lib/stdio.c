@@ -9,10 +9,18 @@ static int print_number(char *buf, uint64_t num, int base, int is_signed, int up
   const char *digits = uppercase ? digits_u : digits_l;
   char temp[32];
   int i = 0;
+  int chars_written = 0;
 
   if (is_signed && ((int64_t)num) < 0) {
     *buf++ = '-';
+    chars_written++;
     num = -(int64_t)num;
+  }
+
+  // Handle special case of 0
+  if (num == 0) {
+    *buf++ = '0';
+    return chars_written + 1;
   }
 
   do {
@@ -24,7 +32,7 @@ static int print_number(char *buf, uint64_t num, int base, int is_signed, int up
     *buf++ = temp[j];
   }
 
-  return i;
+  return chars_written + i;
 }
 
 static int kvsprintf(char *buf, const char *fmt, va_list args) {
@@ -36,36 +44,119 @@ static int kvsprintf(char *buf, const char *fmt, va_list args) {
     }
     fmt++;
 
+    // Gestione flag (per ora ignoriamo, ma dobbiamo saltarli)
+    while (*fmt == '-' || *fmt == '+' || *fmt == ' ' || *fmt == '#' || *fmt == '0') {
+      fmt++;
+    }
+
+    // Gestione larghezza (per ora ignoriamo, ma dobbiamo saltarla)
+    while (*fmt >= '0' && *fmt <= '9') {
+      fmt++;
+    }
+
+    // Gestione precisione (per ora ignoriamo, ma dobbiamo saltarla)
+    if (*fmt == '.') {
+      fmt++;
+      while (*fmt >= '0' && *fmt <= '9') {
+        fmt++;
+      }
+    }
+
+    // Gestione dei modificatori 'l'
+    int long_modifier = 0;
+    while (*fmt == 'l') {
+      long_modifier++;
+      fmt++;
+    }
+
     switch (*fmt) {
     case 'd':
     case 'i':
-      buf += print_number(buf, va_arg(args, int), 10, 1, 0);
+      if (long_modifier >= 2) {
+        // %lld o %lli
+        long long val = va_arg(args, long long);
+        buf += print_number(buf, (uint64_t)val, 10, 1, 0);
+      } else if (long_modifier == 1) {
+        // %ld o %li
+        long val = va_arg(args, long);
+        buf += print_number(buf, (uint64_t)val, 10, 1, 0);
+      } else {
+        // %d o %i
+        int val = va_arg(args, int);
+        buf += print_number(buf, (uint64_t)val, 10, 1, 0);
+      }
       break;
     case 'u':
-      buf += print_number(buf, va_arg(args, unsigned int), 10, 0, 0);
+      if (long_modifier >= 2) {
+        // %llu
+        unsigned long long val = va_arg(args, unsigned long long);
+        buf += print_number(buf, (uint64_t)val, 10, 0, 0);
+      } else if (long_modifier == 1) {
+        // %lu
+        unsigned long val = va_arg(args, unsigned long);
+        buf += print_number(buf, (uint64_t)val, 10, 0, 0);
+      } else {
+        // %u
+        unsigned int val = va_arg(args, unsigned int);
+        buf += print_number(buf, (uint64_t)val, 10, 0, 0);
+      }
       break;
     case 'x':
-      buf += print_number(buf, va_arg(args, unsigned int), 16, 0, 0);
+      if (long_modifier >= 2) {
+        unsigned long long val = va_arg(args, unsigned long long);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 0);
+      } else if (long_modifier == 1) {
+        unsigned long val = va_arg(args, unsigned long);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 0);
+      } else {
+        unsigned int val = va_arg(args, unsigned int);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 0);
+      }
       break;
     case 'X':
-      buf += print_number(buf, va_arg(args, unsigned int), 16, 0, 1);
+      if (long_modifier >= 2) {
+        unsigned long long val = va_arg(args, unsigned long long);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 1);
+      } else if (long_modifier == 1) {
+        unsigned long val = va_arg(args, unsigned long);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 1);
+      } else {
+        unsigned int val = va_arg(args, unsigned int);
+        buf += print_number(buf, (uint64_t)val, 16, 0, 1);
+      }
       break;
     case 'o':
-      buf += print_number(buf, va_arg(args, unsigned int), 8, 0, 0);
+      if (long_modifier >= 2) {
+        unsigned long long val = va_arg(args, unsigned long long);
+        buf += print_number(buf, (uint64_t)val, 8, 0, 0);
+      } else if (long_modifier == 1) {
+        unsigned long val = va_arg(args, unsigned long);
+        buf += print_number(buf, (uint64_t)val, 8, 0, 0);
+      } else {
+        unsigned int val = va_arg(args, unsigned int);
+        buf += print_number(buf, (uint64_t)val, 8, 0, 0);
+      }
       break;
     case 'c':
       *buf++ = (char)va_arg(args, int);
       break;
     case 's': {
       const char *s = va_arg(args, const char *);
-      while (*s)
-        *buf++ = *s++;
+      if (s) {
+        while (*s)
+          *buf++ = *s++;
+      } else {
+        // Handle NULL string
+        const char *null_str = "(null)";
+        while (*null_str)
+          *buf++ = *null_str++;
+      }
       break;
     }
     case 'p':
       *buf++ = '0';
       *buf++ = 'x';
-      buf += print_number(buf, (uptr)va_arg(args, void *), 16, 0, 0);
+      buf += print_number(buf, (uint64_t)(uptr)va_arg(args, void *), 16, 0, 0);
       break;
     case '%':
       *buf++ = '%';
