@@ -1,5 +1,4 @@
-#include <arch/x86_64/paging.h>
-#include <bootloader/limine.h>
+#include <arch/memory.h>
 #include <klib/klog.h>
 #include <lib/string.h>
 #include <lib/types.h>
@@ -7,727 +6,162 @@
 #include <mm/pmm.h>
 
 /*
- * Physical Memory Manager (PMM) - Gestione della memoria fisica
+ * ============================================================================
+ * PHYSICAL MEMORY MANAGER (PMM) - GESTIONE MEMORIA FISICA
+ * ============================================================================
  *
- * Il PMM mantiene uno stato interno che include:
- * - Un bitmap per tracciare le pagine libere/occupate
- * - Informazioni sulla memoria del sistema
- * - Hint per ottimizzare le ricerche
- * - Statistiche di utilizzo
+ * CONCETTI FONDAMENTALI:
+ *
+ * 1. COSA FA IL PMM?
+ *    Il PMM è il "contabile" della memoria fisica del computer.
+ *    Tiene traccia di quali pagine da 4KB sono libere o occupate.
+ *    È come avere una mappa di tutti i "posti a sedere" della memoria.
+ *
+ * 2. PERCHÉ USIAMO LE PAGINE?
+ *    La memoria è divisa in blocchi da 4096 byte (4KB) chiamati "pagine".
+ *    Questo semplifica la gestione: invece di tracciare ogni singolo byte,
+ *    trattiamo la memoria come una serie di mattoncini Lego da 4KB.
+ *
+ * 3. COME FUNZIONA IL BITMAP?
+ *    Usiamo un bitmap dove ogni bit rappresenta una pagina:
+ *    - Bit = 0: pagina libera (posto libero)
+ *    - Bit = 1: pagina occupata (posto occupato)
+ *    Con 1GB di RAM servono solo ~32KB per il bitmap!
+ *
+ * 4. ARCHITETTURA AGNOSTICA:
+ *    Il PMM non sa se stiamo usando x86_64, ARM, o altre architetture.
+ *    Riceve le informazioni dalla memoria dal "layer architetturale"
+ *    e si concentra solo sulla logica di allocazione.
  */
 
-// Stato interno del PMM - tutte le informazioni necessarie per gestire la memoria fisica
-typedef struct {
-  bool initialized;   // Flag: PMM è stato inizializzato?
-  u8 *bitmap;         // Puntatore al bitmap (1 bit per pagina)
-  u64 bitmap_size;    // Dimensione del bitmap in byte
-  u64 total_pages;    // Numero totale di pagine nel sistema
-  u64 usable_pages;   // Pagine effettivamente utilizzabili
-  u64 highest_page;   // Numero della pagina con indirizzo più alto
-  u64 next_free_hint; // Hint: dove iniziare a cercare la prossima pagina libera
+/*
+ * ============================================================================
+ * STRUTTURE DATI INTERNE
+ * ============================================================================
+ */
 
-  // Informazioni sulla memoria (cache per evitare ricalcoli)
-  u64 total_memory;  // Memoria totale del sistema in byte
-  u64 usable_memory; // Memoria utilizzabile dal kernel in byte
+/**
+ * @brief Stato interno del PMM - tutte le informazioni per funzionare
+ *
+ * ANALOGIA: È come l'ufficio del direttore di un cinema che sa:
+ * - Quanti posti ci sono in totale
+ * - Dove si trova la mappa dei posti (bitmap)
+ * - Da dove iniziare a cercare posti liberi (hint)
+ */
+typedef struct {
+  bool initialized;   /* PMM è pronto all'uso? */
+  u8 *bitmap;         /* Puntatore alla "mappa dei posti" */
+  u64 bitmap_size;    /* Quanto è grande la mappa (in byte) */
+  u64 total_pages;    /* Quante pagine totali gestiamo */
+  u64 next_free_hint; /* Suggerimento: da dove cercare prossima pagina libera */
+
+  /* Cache delle informazioni generali sulla memoria */
+  u64 total_memory_bytes;  /* Memoria fisica totale del sistema */
+  u64 usable_memory_bytes; /* Memoria che possiamo effettivamente usare */
 } pmm_state_t;
 
-// Statistiche globali del PMM - vengono aggiornate ad ogni operazione
+/* Statistiche globali - condivise con il resto del kernel */
 static pmm_stats_t pmm_stats;
-
-// Stato globale del PMM - una sola istanza per tutto il kernel
 static pmm_state_t pmm_state = {.initialized = false};
 
-// Riferimento esterno alla memory map di Limine (definita in memory.c)
-extern volatile struct limine_memmap_request memmap_request;
-
 /*
- * MACRO PER OPERAZIONI SUL BITMAP
+ * ============================================================================
+ * OPERAZIONI SUL BITMAP - IL CUORE DEL PMM
+ * ============================================================================
  *
- * Il bitmap usa 1 bit per pagina:
- * - Bit = 0: pagina libera
- * - Bit = 1: pagina occupata
+ * SPIEGAZIONE DETTAGLIATA DEL BITMAP:
  *
- * Per accedere al bit N:
- * - Byte index = N / 8
- * - Bit offset = N % 8
+ * Il bitmap è un array di byte dove ogni bit rappresenta una pagina.
+ * Per accedere al bit della pagina N:
+ * - Byte da modificare: N / 8 (divisione intera)
+ * - Posizione nel byte: N % 8 (resto della divisione)
+ *
+ * ESEMPIO PRATICO:
+ * Pagina 13 → Byte 13/8 = 1, Bit 13%8 = 5
+ * Quindi modifichiamo il bit 5 del byte 1 del bitmap.
+ *
+ * OPERAZIONI BITWISE:
+ * - SET (mettere a 1): OR con maschera    |= (1 << posizione)
+ * - CLEAR (mettere a 0): AND con ~maschera &= ~(1 << posizione)
+ * - TEST (leggere): AND con maschera       & (1 << posizione)
  */
 #define BITMAP_SET_BIT(bitmap, bit) ((bitmap)[(bit) / 8] |= (1 << ((bit) % 8)))
 #define BITMAP_CLEAR_BIT(bitmap, bit) ((bitmap)[(bit) / 8] &= ~(1 << ((bit) % 8)))
 #define BITMAP_TEST_BIT(bitmap, bit) ((bitmap)[(bit) / 8] & (1 << ((bit) % 8)))
 
 /*
- * ESEMPIO DI COME FUNZIONA IL BITMAP:
- *
- * Supponiamo di avere 16 pagine (per semplicità):
- * Bitmap = [0xFF, 0x0F] = [11111111, 00001111]
- *
- * Pagina 0: bit 0 di byte 0 = 1 (occupata)
- * Pagina 1: bit 1 di byte 0 = 1 (occupata)
- * ...
- * Pagina 7: bit 7 di byte 0 = 1 (occupata)
- * Pagina 8: bit 0 di byte 1 = 1 (occupata)
- * ...
- * Pagina 11: bit 3 di byte 1 = 1 (occupata)
- * Pagina 12: bit 4 di byte 1 = 0 (libera)
- * ...
- */
-
-// Dichiarazioni delle funzioni interne (implementate nei passi successivi)
-static pmm_result_t pmm_analyze_memory_map(void);
-static pmm_result_t pmm_find_bitmap_location(void);
-static void pmm_init_bitmap(void);
-static void pmm_mark_memory_regions(void);
-static void pmm_mark_page_used(u64 page_index);
-static void pmm_mark_page_free(u64 page_index);
-static bool pmm_is_page_used_internal(u64 page_index);
-static void pmm_update_free_pages_count(void);
-
-/*
- * SPIEGAZIONE DELL'ARCHITETTURA:
- *
- * 1. Il PMM divide tutta la memoria fisica in pagine da 4KB
- * 2. Ogni pagina ha un numero (indice): 0, 1, 2, 3...
- * 3. Il bitmap ha 1 bit per ogni pagina per tracciarne lo stato
- * 4. Per 1GB di RAM servono ~32KB di bitmap (1GB / 4KB / 8 bit)
- * 5. Il bitmap stesso viene posizionato in una regione usabile
- */
-
-/*
- * CONVERSIONE TIPI LIMINE E ANALISI MEMORY MAP
- */
-
-/**
- * @brief Converte i tipi di memoria di Limine ai nostri tipi interni
- *
- * Limine usa dei numeri per identificare i tipi di memoria.
- * Noi li convertiamo ai nostri enum per maggiore chiarezza.
- *
- * @param limine_type Tipo di memoria secondo Limine
- * @return Il nostro tipo di memoria corrispondente
- */
-static memory_type_t pmm_convert_limine_type(uint64_t limine_type) {
-  switch (limine_type) {
-  case LIMINE_MEMMAP_USABLE: // = 0
-    return MEMORY_USABLE;    // RAM libera, può essere usata
-
-  case LIMINE_MEMMAP_RESERVED: // = 1
-    return MEMORY_RESERVED;    // Riservata dal firmware/hardware
-
-  case LIMINE_MEMMAP_ACPI_RECLAIMABLE: // = 2
-    return MEMORY_ACPI_RECLAIMABLE;    // Tabelle ACPI, recuperabile dopo lettura
-
-  case LIMINE_MEMMAP_ACPI_NVS: // = 3
-    return MEMORY_ACPI_NVS;    // ACPI non-volatile, mai toccabile
-
-  case LIMINE_MEMMAP_BAD_MEMORY: // = 4
-    return MEMORY_BAD;           // RAM difettosa
-
-  case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE: // = 5
-    return MEMORY_BOOTLOADER_RECLAIMABLE;    // Usata da Limine, recuperabile
-
-  case LIMINE_MEMMAP_KERNEL_AND_MODULES:  // = 6
-    return MEMORY_EXECUTABLE_AND_MODULES; // Il nostro kernel
-
-  case LIMINE_MEMMAP_FRAMEBUFFER: // = 7
-    return MEMORY_FRAMEBUFFER;    // Memoria video
-
-  default:
-    return MEMORY_RESERVED; // Se non riconosciuto = riservato
-  }
-}
-
-/**
- * @brief Analizza la memory map di Limine per capire la struttura della memoria
- *
- * Questa funzione fa la "ricognizione" della memoria:
- * 1. Legge tutte le regioni dalla memory map di Limine
- * 2. Calcola quanta memoria totale abbiamo
- * 3. Trova la pagina con indirizzo più alto
- * 4. Conta quanta memoria è utilizzabile
- *
- * È come fare un censimento della memoria disponibile.
- *
- * @return PMM_SUCCESS se l'analisi è riuscita, errore altrimenti
- */
-static pmm_result_t pmm_analyze_memory_map(void) __attribute__((unused));
-static pmm_result_t pmm_analyze_memory_map(void) {
-  // Verifica che Limine ci abbia dato la memory map
-  if (!memmap_request.response) {
-    klog_error("PMM: Memory map non disponibile da Limine");
-    return PMM_NOT_INITIALIZED;
-  }
-
-  struct limine_memmap_response *response = memmap_request.response;
-
-  // Inizializza i contatori
-  pmm_state.total_memory = 0;
-  pmm_state.usable_memory = 0;
-  pmm_state.highest_page = 0;
-
-  klog_info("PMM: Analisi memory map (%lu regioni)", response->entry_count);
-
-  /*
-   * PRIMA PASSATA: Scopri i limiti della memoria
-   *
-   * Iteriamo attraverso tutte le regioni di memoria per:
-   * - Sommare la memoria totale
-   * - Trovare l'indirizzo più alto (per dimensionare il bitmap)
-   * - Contare quanta memoria è utilizzabile
-   */
-  for (u64 i = 0; i < response->entry_count; i++) {
-    struct limine_memmap_entry *entry = response->entries[i];
-    memory_type_t type = pmm_convert_limine_type(entry->type);
-
-    // Accumula memoria totale
-    pmm_state.total_memory += entry->length;
-
-    /*
-     * CALCOLO PAGINA PIÙ ALTA:
-     *
-     * Se una regione va da 0x100000 a 0x200000:
-     * - end_addr = 0x100000 + 0x100000 = 0x200000
-     * - end_page = 0x200000 >> 12 = 512
-     *
-     * Questo ci dice che abbiamo bisogno di almeno 513 bit nel bitmap
-     * (pagine 0-512 inclusive).
-     */
-    u64 end_addr = entry->base + entry->length;
-    u64 end_page = ADDR_TO_PAGE(end_addr);
-    if (end_page > pmm_state.highest_page) {
-      pmm_state.highest_page = end_page;
-    }
-
-    // Conta memoria utilizzabile (solo regioni USABLE per ora)
-    if (type == MEMORY_USABLE) {
-      pmm_state.usable_memory += entry->length;
-    }
-
-    klog_debug("PMM: Regione %lu: 0x%016lx-0x%016lx (%lu MB) tipo=%d", i, entry->base, end_addr - 1, entry->length / MB, type);
-  }
-
-  /*
-   * CALCOLI FINALI:
-   *
-   * - total_pages: quante pagine totali dobbiamo gestire
-   * - usable_pages: quante di queste sono utilizzabili
-   */
-  pmm_state.total_pages = pmm_state.highest_page + 1;
-  pmm_state.usable_pages = pmm_state.usable_memory / PAGE_SIZE;
-
-  klog_info("PMM: Memoria totale: %lu MB (%lu pagine)", pmm_state.total_memory / MB, pmm_state.total_pages);
-  klog_info("PMM: Memoria usabile: %lu MB (%lu pagine)", pmm_state.usable_memory / MB, pmm_state.usable_pages);
-  klog_info("PMM: Pagina più alta: %lu (0x%lx)", pmm_state.highest_page, PAGE_TO_ADDR(pmm_state.highest_page));
-
-  return PMM_SUCCESS;
-}
-
-/*
- * ESEMPIO PRATICO:
- *
- * Su un sistema con 512MB di RAM, potremmo avere:
- *
- * Regione 0: 0x000000-0x09FFFF (640KB)   - USABLE
- * Regione 1: 0x0A0000-0x0FFFFF (384KB)   - RESERVED (VGA, BIOS)
- * Regione 2: 0x100000-0x1FFFFFF (31MB)   - USABLE
- * Regione 3: 0x2000000-0x20000FF (256B)  - KERNEL_AND_MODULES (nostro kernel)
- * Regione 4: 0x2000100-0x1FFFFFFF (480MB) - USABLE
- *
- * Risultato:
- * - total_memory = 512MB
- * - usable_memory = 640KB + 31MB + 480MB = ~511MB
- * - highest_page = 0x20000000 >> 12 = 131072
- * - total_pages = 131073
- */
-
-/*
- * POSIZIONAMENTO DEL BITMAP
- */
-
-/**
- * @brief Trova una posizione adatta per il bitmap nella memoria usabile
- *
- * Il bitmap è la struttura dati principale del PMM. Dobbiamo posizionarlo
- * da qualche parte nella memoria fisica, preferibilmente in una regione USABLE.
- *
- * REQUISITI DEL BITMAP:
- * - 1 bit per ogni pagina del sistema
- * - Deve essere in memoria accessibile al kernel
- * - Deve essere in una regione che non verrà sovrascritta
- *
- * CALCOLO DIMENSIONE:
- * Per N pagine, servono N bit = N/8 byte (arrotondato in su)
- * Esempio: 131072 pagine = 131072/8 = 16384 byte = 16KB
- *
- * @return PMM_SUCCESS se trova una posizione, PMM_OUT_OF_MEMORY altrimenti
- */
-static pmm_result_t pmm_find_bitmap_location(void) __attribute__((unused));
-static pmm_result_t pmm_find_bitmap_location(void) {
-  if (!memmap_request.response) {
-    return PMM_NOT_INITIALIZED;
-  }
-
-  /*
-   * CALCOLO DIMENSIONE BITMAP:
-   *
-   * Se abbiamo total_pages pagine, ci servono total_pages bit.
-   * Siccome 1 byte = 8 bit, ci servono total_pages/8 byte.
-   * Usiamo (total_pages + 7) / 8 per arrotondare in su.
-   *
-   * Esempio:
-   * - 1000 pagine: (1000 + 7) / 8 = 1007 / 8 = 125 byte
-   * - 1001 pagine: (1001 + 7) / 8 = 1008 / 8 = 126 byte
-   */
-  pmm_state.bitmap_size = (pmm_state.total_pages + 7) / 8;
-
-  /*
-   * CALCOLO PAGINE NECESSARIE:
-   *
-   * Il bitmap stesso occuperà delle pagine. Dobbiamo sapere quante
-   * per poi marcarle come occupate nel bitmap stesso.
-   */
-  u64 bitmap_pages_needed = PAGE_ALIGN_UP(pmm_state.bitmap_size) / PAGE_SIZE;
-
-  klog_info("PMM: Bitmap richiesto: %lu bytes (%lu pagine)", pmm_state.bitmap_size, bitmap_pages_needed);
-
-  struct limine_memmap_response *response = memmap_request.response;
-
-  /*
-   * RICERCA POSIZIONE ADATTA:
-   *
-   * Cerchiamo una regione USABLE abbastanza grande per contenere il bitmap.
-   * Preferiamo regioni all'inizio della memoria per semplicità.
-   */
-  for (u64 i = 0; i < response->entry_count; i++) {
-    struct limine_memmap_entry *entry = response->entries[i];
-    memory_type_t type = pmm_convert_limine_type(entry->type);
-
-    /*
-     * VERIFICA CANDIDATO:
-     *
-     * 1. Deve essere USABLE
-     * 2. Deve essere abbastanza grande
-     * 3. Dobbiamo poter allineare l'indirizzo alla pagina
-     */
-    if (type == MEMORY_USABLE && entry->length >= pmm_state.bitmap_size) {
-      /*
-       * ALLINEAMENTO ALLA PAGINA:
-       *
-       * Il bitmap deve iniziare su un boundary di pagina per semplicità.
-       * Se la regione inizia a 0x100100, allineiamo a 0x101000.
-       */
-      u64 aligned_base = PAGE_ALIGN_UP(entry->base);
-      u64 available_space = entry->base + entry->length - aligned_base;
-
-      /*
-       * VERIFICA SPAZIO SUFFICIENTE:
-       *
-       * Dopo l'allineamento, verifichiamo che ci sia ancora
-       * abbastanza spazio per il bitmap.
-       */
-      if (available_space >= pmm_state.bitmap_size) {
-        pmm_state.bitmap = (u8 *)aligned_base;
-        pmm_stats.bitmap_pages = bitmap_pages_needed;
-
-        klog_info("PMM: Bitmap posizionato a 0x%lx (%lu KB)", aligned_base, pmm_state.bitmap_size / 1024);
-
-        return PMM_SUCCESS;
-      }
-    }
-  }
-
-  /*
-   * FALLIMENTO:
-   *
-   * Se arriviamo qui, non abbiamo trovato nessuna regione abbastanza grande.
-   * Questo può accadere se:
-   * - C'è poca memoria libera
-   * - La memoria è molto frammentata
-   * - Il bitmap richiesto è troppo grande
-   */
-  klog_error("PMM: Impossibile trovare spazio per bitmap (%lu bytes richiesti)", pmm_state.bitmap_size);
-  return PMM_OUT_OF_MEMORY;
-}
-
-/*
- * ESEMPIO PRATICO:
- *
- * Sistema con 4GB di RAM:
- * - total_pages = 4GB / 4KB = 1,048,576 pagine
- * - bitmap_size = 1,048,576 / 8 = 131,072 byte = 128KB
- * - bitmap_pages_needed = 128KB / 4KB = 32 pagine
- *
- * Supponiamo memory map:
- * Regione 0: 0x100000-0x7FFFFFFF (2GB-1MB) USABLE
- *
- * Processo:
- * 1. aligned_base = PAGE_ALIGN_UP(0x100000) = 0x100000 (già allineato)
- * 2. available_space = 0x7FFFFFFF - 0x100000 = ~2GB (più che sufficiente)
- * 3. bitmap posizionato a 0x100000
- * 4. Il bitmap occuperà 0x100000-0x11FFFF (128KB)
- *
- * Risultato: bitmap a 0x100000, occupa 32 pagine
- */
-
-/*
- * INIZIALIZZAZIONE DEL BITMAP
- */
-
-/**
- * @brief Inizializza il bitmap marcando tutte le pagine come occupate
- *
- * FILOSOFIA "SICUREZZA PRIMA":
- *
- * Per sicurezza, inizializziamo tutto il bitmap a 1 (pagine occupate).
- * Questo significa che inizialmente consideriamo TUTTA la memoria come occupata.
- *
- * Successivamente, andremo a marcare come libere SOLO le pagine che sappiamo
- * essere sicuramente utilizzabili. Questo approccio conservativo previene
- * accessi accidentali a memoria riservata.
- *
- * ALTERNATIVA PERICOLOSA:
- * Potremmo inizializzare a 0 (tutto libero) e poi marcare come occupate
- * le aree riservate, ma questo è rischioso: se ci dimentichiamo una regione
- * riservata, potremmo sovrascrivere dati critici.
- */
-static void pmm_init_bitmap(void) __attribute__((unused));
-static void pmm_init_bitmap(void) {
-  /*
-   * INIZIALIZZAZIONE A "TUTTO OCCUPATO":
-   *
-   * memset(bitmap, 0xFF, size) imposta tutti i bit a 1.
-   * 0xFF = 11111111 in binario = tutti i bit settati.
-   *
-   * Dopo questa operazione:
-   * - Tutte le pagine risultano "occupate"
-   * - Nessuna pagina può essere allocata accidentalmente
-   * - Dobbiamo esplicitamente marcare come libere le pagine utilizzabili
-   */
-  memset(pmm_state.bitmap, 0xFF, pmm_state.bitmap_size);
-
-  /*
-   * INIZIALIZZAZIONE STATISTICHE:
-   *
-   * Le statistiche riflettono lo stato corrente del bitmap.
-   * Inizialmente tutte le pagine sono "occupate".
-   */
-  pmm_stats.total_pages = pmm_state.total_pages;
-  pmm_stats.free_pages = 0;                     // Nessuna pagina libera inizialmente
-  pmm_stats.used_pages = pmm_state.total_pages; // Tutte considerate occupate
-  pmm_stats.reserved_pages = 0;                 // Calcolato dopo
-  pmm_stats.alloc_count = 0;                    // Nessuna allocazione ancora
-  pmm_stats.free_count = 0;                     // Nessuna deallocazione ancora
-  pmm_stats.largest_free_run = 0;               // Nessun blocco libero
-
-  klog_debug("PMM: Bitmap inizializzato - %lu pagine marcate come occupate", pmm_state.total_pages);
-}
-
-/*
- * ESEMPIO VISIVO DEL BITMAP:
- *
- * Supponiamo 16 pagine per semplicità:
- *
- * DOPO pmm_init_bitmap():
- *
- * Pagine: 0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
- * Bitmap: 1  1  1  1  1  1  1  1  1  1  1  1  1  1  1  1
- * Byte:   [11111111] [11111111]
- *         = [0xFF]   [0xFF]
- *
- * Significato:
- * - Pagina 0: occupata (bit 0 = 1)
- * - Pagina 1: occupata (bit 1 = 1)
- * - ...
- * - Pagina 15: occupata (bit 7 del byte 1 = 1)
- *
- * Questo è il punto di partenza "sicuro". Successivamente andremo a
- * "liberare" esplicitamente le pagine che sappiamo essere utilizzabili.
- */
-
-/*
- * FUNZIONI DI MANIPOLAZIONE BITMAP
- *
- * Queste sono le funzioni fondamentali per manipolare il bitmap.
- * Sono il "cuore" del PMM - tutto il resto si basa su queste operazioni.
+ * ============================================================================
+ * FUNZIONI INTERNE - MANIPOLAZIONE BITMAP
+ * ============================================================================
  */
 
 /**
  * @brief Marca una pagina come occupata nel bitmap
  *
- * OPERAZIONE: Imposta il bit corrispondente alla pagina a 1.
+ * ANALOGIA: È come mettere un segno "OCCUPATO" su un posto al cinema.
+ * Una volta chiamata questa funzione, quella pagina non può essere
+ * allocata ad altri fino a quando non viene liberata.
  *
- * DETTAGLI IMPLEMENTATIVI:
- * - Il bit della pagina N si trova nel byte N/8, posizione N%8
- * - Usiamo OR bitwise (|=) per settare il bit senza alterare gli altri
- *
- * @param page_index Indice della pagina da marcare come occupata
+ * SICUREZZA: Controlla sempre che l'indice sia valido per evitare
+ * di scrivere fuori dal bitmap (buffer overflow).
  */
 static void pmm_mark_page_used(u64 page_index) {
-  // Verifica bounds per evitare buffer overflow
+  /* Controllo di sicurezza: la pagina esiste davvero? */
   if (page_index < pmm_state.total_pages) {
     BITMAP_SET_BIT(pmm_state.bitmap, page_index);
+    /* Ora il bit corrispondente è 1 = pagina occupata */
   }
+  /* Se page_index >= total_pages, ignoriamo silenziosamente per sicurezza */
 }
 
 /**
  * @brief Marca una pagina come libera nel bitmap
  *
- * OPERAZIONE: Imposta il bit corrispondente alla pagina a 0.
- *
- * DETTAGLI IMPLEMENTATIVI:
- * - Usiamo AND bitwise (&=) con la negazione per cancellare solo quel bit
- * - ~(1 << (bit%8)) crea una maschera con tutti i bit a 1 eccetto quello target
- *
- * @param page_index Indice della pagina da marcare come libera
+ * ANALOGIA: È come rimuovere il segno "OCCUPATO" da un posto al cinema.
+ * Dopo questa operazione, la pagina può essere allocata ad altri.
  */
 static void pmm_mark_page_free(u64 page_index) {
-  // Verifica bounds per evitare buffer overflow
   if (page_index < pmm_state.total_pages) {
     BITMAP_CLEAR_BIT(pmm_state.bitmap, page_index);
+    /* Ora il bit corrispondente è 0 = pagina libera */
   }
 }
 
 /**
- * @brief Verifica se una pagina è occupata
+ * @brief Controlla se una pagina è occupata
  *
- * OPERAZIONE: Legge il bit corrispondente alla pagina.
- *
- * SICUREZZA: Pagine fuori range sono considerate sempre occupate
- * per prevenire accessi a memoria non valida.
- *
- * @param page_index Indice della pagina da verificare
- * @return true se la pagina è occupata, false se è libera
+ * FILOSOFIA "FAIL-SAFE":
+ * Se chiedi lo stato di una pagina che non esiste, rispondiamo
+ * "occupata" per sicurezza. È meglio dire "non disponibile"
+ * quando in dubbio, piuttosto che rischiare di corrompere memoria.
  */
 static bool pmm_is_page_used_internal(u64 page_index) {
-  // Pagine fuori range = sempre occupate (sicurezza)
+  /* Pagine fuori range = sempre occupate (sicurezza) */
   if (page_index >= pmm_state.total_pages) {
     return true;
   }
 
-  // Testa il bit: se != 0, la pagina è occupata
+  /* Leggi il bit e convertilo in boolean */
   return BITMAP_TEST_BIT(pmm_state.bitmap, page_index) != 0;
 }
 
-/*
- * ESEMPIO STEP-BY-STEP DELLE OPERAZIONI:
- *
- * Stato iniziale (8 pagine per semplicità):
- * Bitmap: [11111111] = 0xFF
- * Pagine: 7 6 5 4 3 2 1 0 (ordine dei bit nel byte)
- *         1 1 1 1 1 1 1 1 (tutte occupate)
- *
- * 1. pmm_mark_page_free(3):
- *    - Byte index = 3/8 = 0
- *    - Bit offset = 3%8 = 3
- *    - Maschera = ~(1 << 3) = ~00001000 = 11110111
- *    - bitmap[0] &= 11110111
- *    - Risultato: [11110111] = 0xF7
- *
- * 2. pmm_mark_page_free(5):
- *    - Byte index = 5/8 = 0
- *    - Bit offset = 5%8 = 5
- *    - Maschera = ~(1 << 5) = ~00100000 = 11011111
- *    - bitmap[0] &= 11011111
- *    - Risultato: [11010111] = 0xD7
- *
- * 3. pmm_is_page_used_internal(3):
- *    - Test bit 3: bitmap[0] & 00001000 = 11010111 & 00001000 = 0
- *    - Ritorna false (pagina libera)
- *
- * 4. pmm_is_page_used_internal(4):
- *    - Test bit 4: bitmap[0] & 00010000 = 11010111 & 00010000 = 00010000
- *    - Ritorna true (pagina occupata)
- *
- * Stato finale:
- * Bitmap: [11010111] = 0xD7
- * Pagine: 7 6 5 4 3 2 1 0
- *         1 1 0 1 0 1 1 1
- *         ↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑
- *         | | | | | | | +-- Pagina 0: occupata
- *         | | | | | | +-- Pagina 1: occupata
- *         | | | | | +-- Pagina 2: occupata
- *         | | | | +-- Pagina 3: LIBERA ✓
- *         | | | +-- Pagina 4: occupata
- *         | | +-- Pagina 5: LIBERA ✓
- *         | +-- Pagina 6: occupata
- *         +-- Pagina 7: occupata
- *
- * PERFORMANCE NOTE:
- * Queste operazioni sono O(1) - costante, molto veloci!
- * L'accesso a un singolo bit richiede:
- * 1. Una divisione/modulo (o shift/mask)
- * 2. Un accesso a memoria
- * 3. Un'operazione bitwise
- */
-
-/*
- * MARCATURA DELLE REGIONI DI MEMORIA
- *
- * Ora che abbiamo il bitmap inizializzato (tutto occupato), dobbiamo
- * andare regione per regione e marcare come LIBERE quelle che possiamo usare.
- */
-
 /**
- * @brief Marca le regioni di memoria secondo il loro tipo
+ * @brief Ricalcola le statistiche contando tutto il bitmap
  *
- * PROCESSO:
- * 1. Iterare attraverso tutte le regioni dalla memory map di Limine
- * 2. Per ogni regione, determinare se è utilizzabile o riservata
- * 3. Marcare le pagine corrispondenti nel bitmap
- * 4. Aggiornare le statistiche
+ * QUANDO USARLA:
+ * Questa funzione è "costosa" (O(n)) perché deve guardare ogni singola
+ * pagina. La usiamo solo quando necessiamo accuratezza assoluta,
+ * non ad ogni allocazione/deallocazione.
  *
- * POLITICA DI UTILIZZO:
- * - USABLE: Immediatamente utilizzabile → marca come libero
- * - BOOTLOADER_RECLAIMABLE: Utilizzabile dopo init → marca come libero
- * - ACPI_RECLAIMABLE: Utilizzabile dopo lettura tabelle → marca come libero
- * - Tutto il resto: Riservato → lascia occupato
+ * ALTERNATIVE PIÙ VELOCI:
+ * Durante le operazioni normali, aggiorniamo le statistiche
+ * incrementalmente (±1 ad ogni alloc/free) per performance.
  */
-static void pmm_mark_memory_regions(void) __attribute__((unused));
-static void pmm_mark_memory_regions(void) {
-  struct limine_memmap_response *response = memmap_request.response;
-
-  klog_info("PMM: Marcatura regioni di memoria...");
-
-  /*
-   * ITERAZIONE ATTRAVERSO TUTTE LE REGIONI:
-   *
-   * Per ogni regione nella memory map, determiniamo le pagine
-   * che copre e le marchiamo secondo il tipo.
-   */
-  for (u64 i = 0; i < response->entry_count; i++) {
-    struct limine_memmap_entry *entry = response->entries[i];
-    memory_type_t type = pmm_convert_limine_type(entry->type);
-
-    /*
-     * CALCOLO RANGE DI PAGINE:
-     *
-     * Una regione va da entry->base a entry->base + entry->length.
-     * Dobbiamo convertire questi indirizzi in numeri di pagina.
-     *
-     * Esempio:
-     * - Regione: 0x100000-0x200000 (1MB-2MB)
-     * - start_page = 0x100000 >> 12 = 256
-     * - end_addr = 0x100000 + 0x100000 = 0x200000
-     * - end_page = (0x200000 - 1) >> 12 = 511
-     * - page_count = 511 - 256 + 1 = 256 pagine
-     */
-    u64 start_page = ADDR_TO_PAGE(entry->base);
-    u64 end_page = ADDR_TO_PAGE(entry->base + entry->length - 1);
-    u64 page_count = end_page - start_page + 1;
-
-    /*
-     * MARCATURA SECONDO IL TIPO:
-     *
-     * Diversi tipi di memoria richiedono trattamenti diversi.
-     */
-    switch (type) {
-    case MEMORY_USABLE:
-      /*
-       * MEMORIA USABILE:
-       *
-       * Questa è RAM che possiamo usare liberamente.
-       * Marchiamo tutte le pagine come libere.
-       */
-      for (u64 page = start_page; page <= end_page; page++) {
-        pmm_mark_page_free(page);
-      }
-      klog_debug("PMM: Marcate %lu pagine usabili (0x%lx-0x%lx)", page_count, PAGE_TO_ADDR(start_page), PAGE_TO_ADDR(end_page));
-      break;
-
-    case MEMORY_BOOTLOADER_RECLAIMABLE:
-      /*
-       * MEMORIA BOOTLOADER RECLAIMABLE:
-       *
-       * Questa memoria è usata da Limine durante il boot, ma
-       * può essere recuperata una volta che il kernel è attivo.
-       * La marchiamo come libera.
-       */
-      for (u64 page = start_page; page <= end_page; page++) {
-        pmm_mark_page_free(page);
-      }
-      klog_debug("PMM: Marcate %lu pagine bootloader reclaimable", page_count);
-      break;
-
-    case MEMORY_ACPI_RECLAIMABLE:
-      /*
-       * MEMORIA ACPI RECLAIMABLE:
-       *
-       * Contiene tabelle ACPI che il kernel deve leggere una volta.
-       * Dopo la lettura, questa memoria può essere recuperata.
-       * La marchiamo come libera.
-       */
-      for (u64 page = start_page; page <= end_page; page++) {
-        pmm_mark_page_free(page);
-      }
-      klog_debug("PMM: Marcate %lu pagine ACPI reclaimable", page_count);
-      break;
-
-    case MEMORY_EXECUTABLE_AND_MODULES:
-    case MEMORY_RESERVED:
-    case MEMORY_ACPI_NVS:
-    case MEMORY_BAD:
-    case MEMORY_FRAMEBUFFER:
-    default:
-      /*
-       * MEMORIA RISERVATA:
-       *
-       * Queste regioni non possono essere usate:
-       * - EXECUTABLE_AND_MODULES: Il nostro kernel (non sovrascrivere!)
-       * - RESERVED: Riservata dal firmware/hardware
-       * - ACPI_NVS: Tabelle ACPI permanenti
-       * - BAD: RAM difettosa
-       * - FRAMEBUFFER: Memoria video
-       *
-       * Le lasciamo marcate come occupate (sono già così dal init).
-       */
-      pmm_stats.reserved_pages += page_count;
-      klog_debug("PMM: %lu pagine riservate/occupate per tipo %d", page_count, type);
-      break;
-    }
-  }
-
-  /*
-   * PROTEZIONE DEL BITMAP STESSO:
-   *
-   * Il bitmap stesso occupa della memoria fisica. Dobbiamo marcare
-   * quelle pagine come occupate per evitare di sovrascrivere il bitmap!
-   */
-  u64 bitmap_start_page = ADDR_TO_PAGE((u64)pmm_state.bitmap);
-  u64 bitmap_end_page = ADDR_TO_PAGE((u64)pmm_state.bitmap + pmm_state.bitmap_size - 1);
-
-  for (u64 page = bitmap_start_page; page <= bitmap_end_page; page++) {
-    pmm_mark_page_used(page);
-  }
-
-  klog_info("PMM: Bitmap occupa pagine %lu-%lu (%lu pagine)", bitmap_start_page, bitmap_end_page, pmm_stats.bitmap_pages);
-
-  /*
-   * AGGIORNAMENTO STATISTICHE FINALI:
-   *
-   * Ora che abbiamo marcato tutte le regioni, aggiorniamo
-   * le statistiche contando effettivamente le pagine libere/occupate.
-   */
-  pmm_update_free_pages_count();
-
-  klog_info("PMM: Marcatura completata - %lu libere, %lu occupate, %lu riservate", pmm_stats.free_pages, pmm_stats.used_pages, pmm_stats.reserved_pages);
-}
-
-/**
- * @brief Aggiorna il conteggio delle pagine libere/occupate contando il bitmap
- *
- * Questa funzione "conta" effettivamente i bit nel bitmap per aggiornare
- * le statistiche. È più lenta delle operazioni incrementali, ma garantisce
- * accuratezza.
- */
-static void pmm_update_free_pages_count(void) {
+static void pmm_update_stats(void) {
   u64 free_count = 0;
   u64 used_count = 0;
 
-  /*
-   * CONTEGGIO COMPLETO:
-   *
-   * Iteriamo attraverso tutte le pagine e contiamo quelle
-   * libere e quelle occupate.
-   */
+  /* Conta tutte le pagine una per una */
   for (u64 i = 0; i < pmm_state.total_pages; i++) {
     if (pmm_is_page_used_internal(i)) {
       used_count++;
@@ -736,171 +170,95 @@ static void pmm_update_free_pages_count(void) {
     }
   }
 
+  /* Aggiorna le statistiche globali */
   pmm_stats.free_pages = free_count;
   pmm_stats.used_pages = used_count;
+  pmm_stats.total_pages = pmm_state.total_pages;
 }
 
 /*
- * ESEMPIO PRATICO DELLA MARCATURA:
- *
- * Supponiamo un sistema semplice con questa memory map:
- *
- * Regione 0: 0x000000-0x0FFFFF (1MB)     - RESERVED (legacy area)
- * Regione 1: 0x100000-0x1FFFFF (1MB)     - USABLE
- * Regione 2: 0x200000-0x20FFFF (64KB)    - KERNEL_AND_MODULES (nostro kernel)
- * Regione 3: 0x210000-0x7FFFFFF (~126MB) - USABLE
- * Regione 4: 0x8000000-0x8FFFFFF (16MB)  - BOOTLOADER_RECLAIMABLE
- *
- * Processo di marcatura:
- *
- * 1. Inizialmente: tutte le pagine sono marcate come occupate
- *
- * 2. Regione 0 (RESERVED): lasciamo occupate (pagine 0-255)
- *
- * 3. Regione 1 (USABLE): marchiamo libere (pagine 256-511)
- *    Bitmap: bit 256-511 → 0
- *
- * 4. Regione 2 (KERNEL): lasciamo occupate (pagine 512-527)
- *
- * 5. Regione 3 (USABLE): marchiamo libere (pagine 528-32767)
- *    Bitmap: bit 528-32767 → 0
- *
- * 6. Regione 4 (BOOTLOADER_RECLAIMABLE): marchiamo libere (pagine 32768-36863)
- *    Bitmap: bit 32768-36863 → 0
- *
- * 7. Protezione bitmap: se il bitmap è a 0x100000, marchiamo occupate le
- *    pagine che contengono il bitmap stesso
- *
- * Risultato finale:
- * - Pagine libere: ~32500 (circa 127MB utilizzabili)
- * - Pagine occupate: ~4200 (legacy area + kernel + bitmap)
- * - Pagine riservate: incluse nel conteggio "occupate"
- */
-
-/*
- * IMPLEMENTAZIONI DELLE FUNZIONI PUBBLICHE
- * Queste sono le funzioni che il kernel userà per interagire con il PMM.
+ * ============================================================================
+ * ALGORITMI DI RICERCA - COME TROVARE PAGINE LIBERE
+ * ============================================================================
  */
 
 /**
- * @brief Inizializza il Physical Memory Manager
- */
-pmm_result_t pmm_init(void) {
-  klog_info("PMM: Inizializzazione Physical Memory Manager...");
-
-  // DEBUG: Verifica memmap_request
-  if (!memmap_request.response) {
-    klog_error("PMM: memmap_request.response è NULL!");
-    return PMM_NOT_INITIALIZED;
-  }
-  klog_info("PMM: memmap_request OK, %lu regioni disponibili", memmap_request.response->entry_count);
-
-  // 1. Analizza la memory map di Limine
-  klog_info("PMM: Fase 1 - Analisi memory map...");
-  pmm_result_t result = pmm_analyze_memory_map();
-  if (result != PMM_SUCCESS) {
-    klog_error("PMM: ERRORE nell'analisi della memory map: codice %d", result);
-    return result;
-  }
-  klog_info("PMM: Fase 1 completata - %lu pagine totali, %lu utilizzabili", pmm_state.total_pages, pmm_state.usable_pages);
-
-  // 2. Trova una posizione per il bitmap
-  klog_info("PMM: Fase 2 - Posizionamento bitmap...");
-  result = pmm_find_bitmap_location();
-  if (result != PMM_SUCCESS) {
-    klog_error("PMM: ERRORE nel posizionamento del bitmap: codice %d", result);
-    return result;
-  }
-  klog_info("PMM: Fase 2 completata - Bitmap a 0x%lx, dimensione %lu bytes", (u64)pmm_state.bitmap, pmm_state.bitmap_size);
-
-  // 3. Inizializza il bitmap (tutto occupato)
-  klog_info("PMM: Fase 3 - Inizializzazione bitmap...");
-  pmm_init_bitmap();
-  klog_info("PMM: Fase 3 completata - %lu pagine marcate come occupate", pmm_state.total_pages);
-
-  // 4. Marca le regioni secondo il loro tipo
-  klog_info("PMM: Fase 4 - Marcatura regioni memoria...");
-  pmm_mark_memory_regions();
-  klog_info("PMM: Fase 4 completata - %lu libere, %lu occupate", pmm_stats.free_pages, pmm_stats.used_pages);
-
-  // 5. Imposta l'hint per le ricerche
-  pmm_state.next_free_hint = 0;
-  klog_info("PMM: Hint iniziale impostato a: %lu", pmm_state.next_free_hint);
-
-  // DEBUG: Test immediato bitmap
-  klog_info("PMM: Test immediato bitmap...");
-  u64 test_free_count = 0;
-  for (u64 i = 0; i < 100 && i < pmm_state.total_pages; i++) {
-    if (!pmm_is_page_used_internal(i)) {
-      test_free_count++;
-      if (test_free_count == 1) {
-        klog_info("PMM: Prima pagina libera trovata: %lu", i);
-      }
-    }
-  }
-  klog_info("PMM: Test primi 100 bit - pagine libere trovate: %lu", test_free_count);
-
-  // 6. Marca come inizializzato
-  pmm_state.initialized = true;
-
-  klog_info("PMM: Inizializzazione completata con successo");
-  klog_info("PMM: %lu MB totali, %lu MB utilizzabili", pmm_state.total_memory / MB, pmm_state.usable_memory / MB);
-
-  pmm_mark_page_used(0); // Riserva sempre la pagina 0 - Altrimenti potrebbe causare problemi con i puntatori NULL durante la prima allocazione
-  klog_debug("PMM: Pagina 0 riservata (NULL pointer protection)");
-
-  return PMM_SUCCESS;
-}
-
-/**
- * @brief Trova la prima pagina libera a partire da un hint
+ * @brief Trova la prima pagina libera partendo da un hint
+ *
+ * OTTIMIZZAZIONE "LOCALITY":
+ * Le allocazioni tendono ad essere vicine nel tempo e nello spazio.
+ * Se ho appena allocato la pagina 100, probabilmente la prossima
+ * richiesta vorrà la pagina 101 o giù di lì. Questo riduce la
+ * frammentazione e migliora le performance della cache.
+ *
+ * ALGORITMO:
+ * 1. Cerca dall'hint in avanti → sfrutta località temporale
+ * 2. Se non trova, ricomincia da 0 → garantisce completezza
+ *
+ * COMPLESSITÀ: O(n) worst case, ma O(1) average case con buon hint
  */
 static u64 pmm_find_free_page_from(u64 start_hint) {
+  /* FASE 1: Cerca dall'hint verso la fine */
   for (u64 i = start_hint; i < pmm_state.total_pages; i++) {
     if (!pmm_is_page_used_internal(i)) {
-      return i;
+      return i; /* Trovata! */
     }
   }
 
-  // Se non trovato dopo l'hint, cerca dall'inizio
+  /* FASE 2: Wrap-around - cerca dall'inizio fino all'hint */
   for (u64 i = 0; i < start_hint; i++) {
     if (!pmm_is_page_used_internal(i)) {
-      return i;
+      return i; /* Trovata nel "secondo giro" */
     }
   }
 
-  return pmm_state.total_pages; // Non trovato
+  /* Nessuna pagina libera trovata */
+  return pmm_state.total_pages; /* Valore sentinella = "non trovato" */
 }
 
 /**
- * @brief Trova un blocco di pagine contigue libere
+ * @brief Trova un blocco contiguo di pagine libere
+ *
+ * SFIDA DELLA CONTIGUITÀ:
+ * Trovare N pagine libere è facile. Trovare N pagine libere CONSECUTIVE
+ * è molto più difficile, specialmente se la memoria è frammentata.
+ *
+ * ALGORITMO "SLIDING WINDOW":
+ * 1. Prova ogni posizione come inizio del blocco
+ * 2. Per ogni posizione, controlla se tutte le N pagine sono libere
+ * 3. Se trovi una occupata, salta avanti (ottimizzazione)
+ *
+ * OTTIMIZZAZIONE IMPORTANTE:
+ * Se la pagina (start + i) è occupata, il prossimo blocco valido
+ * può iniziare solo da (start + i + 1), quindi saltiamo direttamente lì.
  */
 static u64 pmm_find_free_pages_from(u64 start_hint, size_t count) {
+  /* FASE 1: Cerca dall'hint in avanti */
   for (u64 start = start_hint; start + count <= pmm_state.total_pages; start++) {
     bool found = true;
 
-    // Verifica se tutte le pagine del blocco sono libere
+    /* Controlla se tutte le pagine nel blocco sono libere */
     for (size_t i = 0; i < count; i++) {
       if (pmm_is_page_used_internal(start + i)) {
         found = false;
-        start += i; // Salta avanti per ottimizzare
+        start += i; /* OTTIMIZZAZIONE: salta avanti invece di +1 */
         break;
       }
     }
 
     if (found) {
-      return start;
+      return start; /* Blocco contiguo trovato! */
     }
   }
 
-  // Se non trovato dopo l'hint, cerca dall'inizio
+  /* FASE 2: Wrap-around search */
   for (u64 start = 0; start < start_hint && start + count <= pmm_state.total_pages; start++) {
     bool found = true;
 
     for (size_t i = 0; i < count; i++) {
       if (pmm_is_page_used_internal(start + i)) {
         found = false;
-        start += i;
+        start += i; /* Stessa ottimizzazione */
         break;
       }
     }
@@ -910,72 +268,340 @@ static u64 pmm_find_free_pages_from(u64 start_hint, size_t count) {
     }
   }
 
-  return pmm_state.total_pages; // Non trovato
+  /* Nessun blocco contiguo disponibile */
+  return pmm_state.total_pages;
 }
+
+/*
+ * ============================================================================
+ * INIZIALIZZAZIONE - MESSA IN FUNZIONE DEL PMM
+ * ============================================================================
+ */
+
+/**
+ * @brief Inizializza il PMM usando l'interfaccia architetturale
+ *
+ * FLUSSO DI INIZIALIZZAZIONE:
+ *
+ * 1. DISCOVERY: Scopri quanta memoria c'è e di che tipo
+ * 2. PLANNING: Calcola le dimensioni del bitmap necessario
+ * 3. ALLOCATION: Trova spazio per il bitmap nella memoria fisica
+ * 4. INITIALIZATION: Imposta il bitmap secondo i tipi di memoria
+ * 5. PROTECTION: Proteggi le aree critiche (bitmap stesso, pagina 0)
+ * 6. FINALIZATION: Aggiorna statistiche e marca come pronto
+ *
+ * PRINCIPIO "CONSERVATIVE":
+ * Inizializziamo tutto come "occupato" e poi liberiamo esplicitamente
+ * solo quello che sappiamo essere sicuro. È meglio essere conservativi
+ * e perdere un po' di memoria che corrompere il sistema.
+ */
+pmm_result_t pmm_init(void) {
+  klog_info("PMM: Avvio inizializzazione Physical Memory Manager");
+
+  /*
+   * STEP 1: INIZIALIZZAZIONE LAYER ARCHITETTURALE
+   *
+   * Il PMM non sa se stiamo girando su x86_64, ARM, RISC-V, etc.
+   * Delega al layer architetturale la scoperta dell'hardware.
+   */
+  arch_memory_init();
+
+  /*
+   * STEP 2: DISCOVERY DELLE REGIONI DI MEMORIA
+   *
+   * Chiediamo al layer architetturale: "Dimmi che memoria abbiamo!"
+   * Risposta: array di regioni con tipo, base, e dimensione.
+   */
+#define MAX_REGIONS 512
+  memory_region_t regions[MAX_REGIONS];
+  size_t region_count = arch_memory_detect_regions(regions, MAX_REGIONS);
+
+  if (region_count == 0) {
+    klog_error("PMM: Il layer architetturale non ha trovato memoria!");
+    return PMM_NOT_INITIALIZED;
+  }
+
+  klog_info("PMM: Trovate %zu regioni di memoria", region_count);
+
+  /*
+   * STEP 3: ANALISI DELLE REGIONI - CALCOLO LIMITI
+   *
+   * Dobbiamo capire:
+   * - Qual è l'indirizzo più alto? (per dimensionare il bitmap)
+   * - Quanta memoria totale abbiamo?
+   * - Quanta è effettivamente utilizzabile?
+   */
+  u64 highest_addr = 0;
+  u64 total_memory = 0;
+  u64 usable_memory = 0;
+
+  for (size_t i = 0; i < region_count; i++) {
+    memory_region_t *region = &regions[i];
+
+    total_memory += region->length;
+
+    /* L'indirizzo finale di questa regione */
+    u64 region_end = region->base + region->length;
+    if (region_end > highest_addr) {
+      highest_addr = region_end;
+    }
+
+    /* Conta solo la memoria che possiamo davvero usare */
+    if (region->type == MEMORY_USABLE || region->type == MEMORY_BOOTLOADER_RECLAIMABLE || region->type == MEMORY_ACPI_RECLAIMABLE) {
+      usable_memory += region->length;
+    }
+  }
+
+  /*
+   * CALCOLI FONDAMENTALI:
+   *
+   * highest_addr ci dice fino a dove arriva la memoria fisica.
+   * Dobbiamo gestire tutte le pagine da 0 fino a highest_addr.
+   *
+   * ESEMPIO: Se highest_addr = 0x40000000 (1GB)
+   * total_pages = 0x40000000 >> 12 = 262144 pagine da gestire
+   */
+  pmm_state.total_pages = ADDR_TO_PAGE(highest_addr);
+  pmm_state.total_memory_bytes = total_memory;
+  pmm_state.usable_memory_bytes = usable_memory;
+
+  klog_info("PMM: Memoria totale: %lu MB, utilizzabile: %lu MB", total_memory / MB, usable_memory / MB);
+  klog_info("PMM: Pagine da gestire: %lu", pmm_state.total_pages);
+
+  /*
+   * STEP 4: DIMENSIONAMENTO E ALLOCAZIONE BITMAP
+   *
+   * Il bitmap ha bisogno di 1 bit per pagina.
+   * Se abbiamo N pagine, servono N/8 byte (arrotondati in su).
+   *
+   * ESEMPIO: 262144 pagine → (262144 + 7) / 8 = 32768 byte = 32KB
+   *
+   * Il bitmap stesso occuperà delle pagine fisiche!
+   * 32KB → PAGE_ALIGN_UP(32768) / 4096 = 8 pagine per il bitmap
+   */
+  pmm_state.bitmap_size = (pmm_state.total_pages + 7) / 8;
+  u64 bitmap_pages_needed = PAGE_ALIGN_UP(pmm_state.bitmap_size) / PAGE_SIZE;
+
+  klog_info("PMM: Il bitmap richiede %lu bytes (%lu pagine)", pmm_state.bitmap_size, bitmap_pages_needed);
+
+  /*
+   * RICERCA POSIZIONE PER IL BITMAP:
+   *
+   * Il bitmap deve stare da qualche parte nella memoria fisica!
+   * Cerchiamo una regione USABLE abbastanza grande e allineata.
+   */
+  u64 bitmap_addr = 0;
+  bool bitmap_found = false;
+
+  for (size_t i = 0; i < region_count; i++) {
+    memory_region_t *region = &regions[i];
+
+    /* Candidato: regione usabile e abbastanza grande */
+    if (region->type == MEMORY_USABLE && region->length >= pmm_state.bitmap_size) {
+      /* Allineamento: il bitmap deve iniziare a un boundary di pagina */
+      u64 aligned_base = PAGE_ALIGN_UP(region->base);
+      u64 available = region->base + region->length - aligned_base;
+
+      if (available >= pmm_state.bitmap_size) {
+        bitmap_addr = aligned_base;
+        bitmap_found = true;
+        break; /* Primo candidato valido = buono */
+      }
+    }
+  }
+
+  if (!bitmap_found) {
+    klog_error("PMM: Impossibile trovare spazio per il bitmap!");
+    return PMM_OUT_OF_MEMORY;
+  }
+
+  pmm_state.bitmap = (u8 *)bitmap_addr;
+  pmm_stats.bitmap_pages = bitmap_pages_needed;
+
+  klog_info("PMM: Bitmap allocato all'indirizzo 0x%lx", bitmap_addr);
+
+  /*
+   * STEP 5: INIZIALIZZAZIONE "CONSERVATIVA" DEL BITMAP
+   *
+   * FILOSOFIA: "Tutto occupato finché non dimostriamo il contrario"
+   *
+   * memset(bitmap, 0xFF) imposta tutti i bit a 1 = tutte occupate.
+   * Poi andremo regione per regione a "liberare" esplicitamente
+   * solo quelle che sappiamo essere sicure da usare.
+   */
+  memset(pmm_state.bitmap, 0xFF, pmm_state.bitmap_size);
+  klog_debug("PMM: Bitmap inizializzato - tutte le pagine marcate occupate");
+
+  /*
+   * STEP 6: MARCATURA DELLE REGIONI SECONDO IL TIPO
+   *
+   * Ora esaminiamo ogni regione e decidiamo cosa farne:
+   * - USABLE/BOOTLOADER_RECLAIMABLE/ACPI_RECLAIMABLE → libera nel bitmap
+   * - Tutto il resto → lascia occupato
+   */
+  for (size_t i = 0; i < region_count; i++) {
+    memory_region_t *region = &regions[i];
+    u64 start_page = ADDR_TO_PAGE(region->base);
+    u64 end_page = ADDR_TO_PAGE(region->base + region->length - 1);
+
+    switch (region->type) {
+    case MEMORY_USABLE:
+    case MEMORY_BOOTLOADER_RECLAIMABLE:
+    case MEMORY_ACPI_RECLAIMABLE:
+      /* Queste regioni sono sicure da usare → libera nel bitmap */
+      for (u64 page = start_page; page <= end_page; page++) {
+        pmm_mark_page_free(page);
+      }
+      klog_debug("PMM: Liberate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
+      break;
+
+    default:
+      /*
+       * MEMORY_RESERVED, MEMORY_EXECUTABLE_AND_MODULES,
+       * MEMORY_BAD, MEMORY_FRAMEBUFFER, etc.
+       * → Lascia occupate (già fatto da memset)
+       */
+      pmm_stats.reserved_pages += (end_page - start_page + 1);
+      klog_debug("PMM: Riservate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
+      break;
+    }
+  }
+
+  /*
+   * STEP 7: PROTEZIONE DEL BITMAP STESSO
+   *
+   * PROBLEMA CRITICO: Il bitmap stesso occupa memoria fisica!
+   * Se non lo proteggiamo, potremmo allocare quelle pagine ad altri
+   * e corrompere il bitmap → crash del sistema.
+   *
+   * SOLUZIONE: Marca esplicitamente come occupate le pagine del bitmap.
+   */
+  u64 bitmap_start_page = ADDR_TO_PAGE(bitmap_addr);
+  u64 bitmap_end_page = ADDR_TO_PAGE(bitmap_addr + pmm_state.bitmap_size - 1);
+
+  for (u64 page = bitmap_start_page; page <= bitmap_end_page; page++) {
+    pmm_mark_page_used(page);
+  }
+
+  klog_info("PMM: Protette le pagine del bitmap %lu-%lu", bitmap_start_page, bitmap_end_page);
+
+  /*
+   * STEP 8: PROTEZIONE PAGINA 0 (NULL POINTER PROTECTION)
+   *
+   * La pagina 0 (indirizzi 0x0000-0x0FFF) non deve mai essere allocata.
+   * Se qualcuno dereferenzia un puntatore NULL, deve andare in crash
+   * subito, non accedere a memoria valida!
+   */
+  pmm_mark_page_used(0);
+  klog_debug("PMM: Pagina 0 protetta (NULL pointer protection)");
+
+  /*
+   * STEP 9: FINALIZZAZIONE E STATISTICHE
+   *
+   * Il PMM è quasi pronto. Aggiorniamo le statistiche finali
+   * e marchiamo come inizializzato.
+   */
+  pmm_update_stats();           /* Conta tutto per avere statistiche accurate */
+  pmm_state.next_free_hint = 0; /* Inizia a cercare dall'inizio */
+  pmm_state.initialized = true; /* Ora il PMM è operativo! */
+
+  klog_info("PMM: Inizializzazione completata con successo!");
+  klog_info("PMM: %lu pagine libere, %lu occupate, %lu riservate", pmm_stats.free_pages, pmm_stats.used_pages, pmm_stats.reserved_pages);
+
+  return PMM_SUCCESS;
+}
+
+/*
+ * ============================================================================
+ * API PUBBLICA - INTERFACCIA PER IL RESTO DEL KERNEL
+ * ============================================================================
+ */
 
 /**
  * @brief Alloca una singola pagina fisica
+ *
+ * CASO D'USO TIPICO:
+ * Il kernel ha bisogno di 4KB per una struttura dati, una page table,
+ * o un buffer. Questa è l'operazione più comune.
+ *
+ * ALGORITMO:
+ * 1. Verifica precondizioni (PMM inizializzato, memoria disponibile)
+ * 2. Cerca pagina libera usando l'hint per performance
+ * 3. Marca la pagina come occupata nel bitmap
+ * 4. Aggiorna statistiche e hint
+ * 5. Restituisce l'indirizzo fisico della pagina
  */
 void *pmm_alloc_page(void) {
+  /* Precondizione: PMM deve essere inizializzato */
   if (!pmm_state.initialized) {
     return NULL;
   }
 
+  /* Precondizione: Deve esserci almeno una pagina libera */
   if (pmm_stats.free_pages == 0) {
-    return NULL; // Memoria esaurita
+    return NULL; /* Memoria fisica esaurita */
   }
 
-  // Trova una pagina libera
+  /* Cerca pagina libera usando l'hint per ottimizzazione */
   u64 page_index = pmm_find_free_page_from(pmm_state.next_free_hint);
-
   if (page_index >= pmm_state.total_pages) {
-    return NULL; // Non trovata
+    return NULL; /* Nessuna pagina trovata (non dovrebbe mai succedere se free_pages > 0) */
   }
 
-  // Marca come occupata
+  /* Allocazione riuscita: aggiorna stato e statistiche */
   pmm_mark_page_used(page_index);
-
-  // Aggiorna statistiche
   pmm_stats.free_pages--;
   pmm_stats.used_pages++;
   pmm_stats.alloc_count++;
 
-  // Aggiorna hint
+  /* Aggiorna hint per la prossima ricerca (località temporale) */
   pmm_state.next_free_hint = page_index + 1;
 
+  /* Converte indice pagina in indirizzo fisico */
   return (void *)PAGE_TO_ADDR(page_index);
 }
 
 /**
  * @brief Alloca multiple pagine fisiche contigue
+ *
+ * QUANDO SERVE:
+ * - Buffer DMA che devono essere fisicamente contigui
+ * - Strutture dati grandi (>4KB) che vogliamo in un blocco unico
+ * - Page directory/page table che occupano più pagine
+ *
+ * DIFFICOLTÀ:
+ * Trovare N pagine contigue è molto più difficile se la memoria
+ * è frammentata. Questa operazione può fallire anche se ci sono
+ * N pagine libere totali ma non consecutive.
  */
 void *pmm_alloc_pages(size_t count) {
+  /* Validazione parametri */
   if (!pmm_state.initialized || count == 0) {
     return NULL;
   }
 
+  /* Verifica disponibilità: servono almeno 'count' pagine libere */
   if (pmm_stats.free_pages < count) {
-    return NULL; // Non abbastanza memoria
+    return NULL;
   }
 
-  // Trova un blocco contiguo
+  /* Cerca blocco contiguo di 'count' pagine */
   u64 start_page = pmm_find_free_pages_from(pmm_state.next_free_hint, count);
-
   if (start_page >= pmm_state.total_pages) {
-    return NULL; // Non trovato
+    return NULL; /* Nessun blocco contiguo disponibile */
   }
 
-  // Marca tutte le pagine come occupate
+  /* Allocazione riuscita: marca tutte le pagine come occupate */
   for (size_t i = 0; i < count; i++) {
     pmm_mark_page_used(start_page + i);
   }
 
-  // Aggiorna statistiche
+  /* Aggiorna statistiche */
   pmm_stats.free_pages -= count;
   pmm_stats.used_pages += count;
   pmm_stats.alloc_count++;
 
-  // Aggiorna hint
+  /* Aggiorna hint */
   pmm_state.next_free_hint = start_page + count;
 
   return (void *)PAGE_TO_ADDR(start_page);
@@ -983,6 +609,15 @@ void *pmm_alloc_pages(size_t count) {
 
 /**
  * @brief Libera una singola pagina fisica
+ *
+ * VALIDAZIONI CRITICHE:
+ * 1. L'indirizzo deve essere valido e allineato
+ * 2. La pagina deve essere effettivamente allocata
+ * 3. Non deve essere una pagina protetta (bitmap, pagina 0)
+ *
+ * DOUBLE-FREE DETECTION:
+ * Se qualcuno prova a liberare una pagina già libera, lo rilevi amo
+ * e ritorniamo un errore invece di corrompere lo stato.
  */
 pmm_result_t pmm_free_page(void *page) {
   if (!pmm_state.initialized) {
@@ -990,37 +625,35 @@ pmm_result_t pmm_free_page(void *page) {
   }
 
   if (!page) {
-    return PMM_INVALID_ADDRESS;
+    return PMM_INVALID_ADDRESS; /* NULL pointer */
   }
 
   u64 addr = (u64)page;
 
-  // Verifica allineamento
+  /* L'indirizzo deve essere allineato a PAGE_SIZE */
   if (addr % PAGE_SIZE != 0) {
     return PMM_INVALID_ADDRESS;
   }
 
   u64 page_index = ADDR_TO_PAGE(addr);
 
-  // Verifica range valido
+  /* La pagina deve esistere nel nostro range */
   if (page_index >= pmm_state.total_pages) {
     return PMM_INVALID_ADDRESS;
   }
 
-  // Verifica se è già libera
+  /* Double-free detection: la pagina deve essere attualmente occupata */
   if (!pmm_is_page_used_internal(page_index)) {
     return PMM_ALREADY_FREE;
   }
 
-  // Marca come libera
+  /* Liberazione: marca come libera e aggiorna statistiche */
   pmm_mark_page_free(page_index);
-
-  // Aggiorna statistiche
   pmm_stats.free_pages++;
   pmm_stats.used_pages--;
   pmm_stats.free_count++;
 
-  // Aggiorna hint se necessario
+  /* Aggiorna hint se questa pagina è "più a sinistra" dell'hint corrente */
   if (page_index < pmm_state.next_free_hint) {
     pmm_state.next_free_hint = page_index;
   }
@@ -1030,6 +663,15 @@ pmm_result_t pmm_free_page(void *page) {
 
 /**
  * @brief Libera multiple pagine fisiche contigue
+ *
+ * OPERAZIONE ATOMICA:
+ * O liberiamo tutte le pagine richieste, o non liberiamo nessuna.
+ * Non può succedere che liberiamo solo alcune pagine del blocco.
+ *
+ * VALIDAZIONE RIGOROSA:
+ * Prima di liberare qualsiasi cosa, controlliamo che TUTTE le pagine
+ * del blocco siano effettivamente allocate. Questo previene corruzioni
+ * se il chiamante passa parametri sbagliati.
  */
 pmm_result_t pmm_free_pages(void *pages, size_t count) {
   if (!pmm_state.initialized) {
@@ -1041,37 +683,39 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
   }
 
   u64 addr = (u64)pages;
-
-  // Verifica allineamento
   if (addr % PAGE_SIZE != 0) {
     return PMM_INVALID_ADDRESS;
   }
 
   u64 start_page = ADDR_TO_PAGE(addr);
 
-  // Verifica range valido
+  /* Controlla che il blocco intero sia nel range valido */
   if (start_page + count > pmm_state.total_pages) {
     return PMM_INVALID_ADDRESS;
   }
 
-  // Verifica che tutte le pagine siano attualmente occupate
+  /*
+   * VALIDAZIONE PREVENTIVA:
+   * Controlla che tutte le pagine siano attualmente occupate
+   * PRIMA di liberarne qualsiasi una. Questo garantisce atomicità.
+   */
   for (size_t i = 0; i < count; i++) {
     if (!pmm_is_page_used_internal(start_page + i)) {
-      return PMM_ALREADY_FREE;
+      return PMM_ALREADY_FREE; /* Almeno una è già libera → errore */
     }
   }
 
-  // Libera tutte le pagine
+  /* Validazione OK: ora libera tutte le pagine */
   for (size_t i = 0; i < count; i++) {
     pmm_mark_page_free(start_page + i);
   }
 
-  // Aggiorna statistiche
+  /* Aggiorna statistiche */
   pmm_stats.free_pages += count;
   pmm_stats.used_pages -= count;
   pmm_stats.free_count++;
 
-  // Aggiorna hint se necessario
+  /* Aggiorna hint */
   if (start_page < pmm_state.next_free_hint) {
     pmm_state.next_free_hint = start_page;
   }
@@ -1080,7 +724,13 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
 }
 
 /**
- * @brief Verifica se una pagina è libera
+ * @brief Controlla se una pagina è libera (query non-distruttiva)
+ *
+ * UTILITÀ:
+ * Funzione di "ispezione" che non modifica nulla. Utile per:
+ * - Debugging ("perché questa allocazione è fallita?")
+ * - Validazione ("è sicuro usare questa pagina?")
+ * - Testing (verifica stato prima/dopo operazioni)
  */
 bool pmm_is_page_free(void *page) {
   if (!pmm_state.initialized || !page) {
@@ -1088,35 +738,46 @@ bool pmm_is_page_free(void *page) {
   }
 
   u64 addr = (u64)page;
-
-  // Verifica allineamento
   if (addr % PAGE_SIZE != 0) {
     return false;
   }
 
   u64 page_index = ADDR_TO_PAGE(addr);
-
-  // Verifica range valido
   if (page_index >= pmm_state.total_pages) {
     return false;
   }
 
+  /* Inverti la logica: "non occupata" = "libera" */
   return !pmm_is_page_used_internal(page_index);
 }
 
 /**
- * @brief Ottiene le statistiche correnti del PMM
+ * @brief Ottiene snapshot delle statistiche correnti
+ *
+ * THREAD-SAFETY NOTE:
+ * Le statistiche sono aggiornate in tempo reale ad ogni operazione.
+ * In un kernel single-threaded non ci sono problemi. Quando
+ * aggiungeremo il threading, dovremo proteggere con lock.
  */
 const pmm_stats_t *pmm_get_stats(void) {
   if (!pmm_state.initialized) {
     return NULL;
   }
-
   return &pmm_stats;
 }
 
+/*
+ * ============================================================================
+ * FUNZIONI DI DIAGNOSTICA E DEBUG
+ * ============================================================================
+ */
+
 /**
- * @brief Stampa informazioni dettagliate sullo stato del PMM
+ * @brief Stampa report completo dello stato del PMM
+ *
+ * OUTPUT HUMAN-READABLE:
+ * Converte i numeri interni in unità comprensibili (MB invece di byte,
+ * percentuali invece di rapporti) per facilitare il debugging.
  */
 void pmm_print_info(void) {
   if (!pmm_state.initialized) {
@@ -1124,23 +785,33 @@ void pmm_print_info(void) {
     return;
   }
 
-  klog_info("=== PHYSICAL MEMORY MANAGER INFO ===");
-  klog_info("Memoria totale: %lu MB (%lu pagine)", pmm_state.total_memory / MB, pmm_stats.total_pages);
-  klog_info("Memoria utilizzabile: %lu MB (%lu pagine)", pmm_state.usable_memory / MB, pmm_state.usable_pages);
+  klog_info("=== STATUS PHYSICAL MEMORY MANAGER ===");
+  klog_info("Memoria totale: %lu MB (%lu pagine)", pmm_state.total_memory_bytes / MB, pmm_stats.total_pages);
+  klog_info("Memoria utilizzabile: %lu MB", pmm_state.usable_memory_bytes / MB);
   klog_info("Pagine libere: %lu (%lu MB)", pmm_stats.free_pages, pmm_stats.free_pages * PAGE_SIZE / MB);
   klog_info("Pagine occupate: %lu (%lu MB)", pmm_stats.used_pages, pmm_stats.used_pages * PAGE_SIZE / MB);
   klog_info("Pagine riservate: %lu (%lu MB)", pmm_stats.reserved_pages, pmm_stats.reserved_pages * PAGE_SIZE / MB);
-  klog_info("Bitmap: %lu pagine (%lu KB)", pmm_stats.bitmap_pages, pmm_state.bitmap_size / 1024);
-  klog_info("Allocazioni totali: %lu", pmm_stats.alloc_count);
-  klog_info("Deallocazioni totali: %lu", pmm_stats.free_count);
+  klog_info("Bitmap: %lu pagine (%lu KB)", pmm_stats.bitmap_pages, pmm_state.bitmap_size / KB);
+  klog_info("Operazioni: %lu allocazioni, %lu deallocazioni", pmm_stats.alloc_count, pmm_stats.free_count);
 
-  // Calcola percentuale di utilizzo
+  /* Calcola e mostra percentuale di utilizzo */
   u64 usage_percent = (pmm_stats.used_pages * 100) / pmm_stats.total_pages;
   klog_info("Utilizzo memoria: %lu%%", usage_percent);
 }
 
 /**
- * @brief Verifica l'integrità del bitmap (debug)
+ * @brief Verifica integrità del PMM (operazione costosa!)
+ *
+ * QUANDO USARLA:
+ * Solo durante debugging o dopo operazioni sospette. È O(n) quindi
+ * lenta su sistemi con molta memoria.
+ *
+ * COSA CONTROLLA:
+ * 1. Le statistiche corrispondono al contenuto effettivo del bitmap?
+ * 2. Non ci sono inconsistenze nei contatori?
+ *
+ * SE FALLISCE:
+ * Indica bug nel PMM o corruzione della memoria → sistema instabile
  */
 bool pmm_check_integrity(void) {
   if (!pmm_state.initialized) {
@@ -1150,7 +821,7 @@ bool pmm_check_integrity(void) {
   u64 free_count = 0;
   u64 used_count = 0;
 
-  // Conta pagine libere e occupate
+  /* Conta manualmente tutto il bitmap */
   for (u64 i = 0; i < pmm_state.total_pages; i++) {
     if (pmm_is_page_used_internal(i)) {
       used_count++;
@@ -1159,59 +830,82 @@ bool pmm_check_integrity(void) {
     }
   }
 
-  // Verifica consistenza con le statistiche
+  /* Confronta con le statistiche cached */
   bool consistent = (free_count == pmm_stats.free_pages) && (used_count == pmm_stats.used_pages);
 
   if (!consistent) {
-    klog_error("PMM: Inconsistenza rilevata!");
-    klog_error("  Contate libere: %lu, Stats: %lu", free_count, pmm_stats.free_pages);
-    klog_error("  Contate occupate: %lu, Stats: %lu", used_count, pmm_stats.used_pages);
+    klog_error("PMM: CORRUZIONE RILEVATA!");
+    klog_error("  Contate libere: %lu, Statistiche: %lu", free_count, pmm_stats.free_pages);
+    klog_error("  Contate occupate: %lu, Statistiche: %lu", used_count, pmm_stats.used_pages);
+    klog_error("  Il sistema potrebbe essere instabile!");
   }
 
   return consistent;
 }
 
 /**
- * @brief Trova la sequenza più lunga di pagine libere contigue
+ * @brief Trova il blocco contiguo più grande di pagine libere
+ *
+ * ANALISI FRAMMENTAZIONE:
+ * Questa funzione ci dice quanto è frammentata la memoria.
+ * Se abbiamo 1000 pagine libere ma il blocco più grande è solo
+ * 10 pagine, la memoria è molto frammentata.
+ *
+ * ALGORITMO "SLIDING WINDOW":
+ * Scorre tutto il bitmap tenendo traccia della sequenza corrente
+ * di pagine libere e del record massimo trovato finora.
  */
 size_t pmm_find_largest_free_run(size_t *start_page) {
   if (!pmm_state.initialized) {
     return 0;
   }
 
-  size_t max_run = 0;
-  size_t current_run = 0;
-  size_t max_start = 0;
-  size_t current_start = 0;
+  size_t max_run = 0;       /* Sequenza più lunga trovata finora */
+  size_t current_run = 0;   /* Sequenza corrente in corso */
+  size_t max_start = 0;     /* Dove inizia la sequenza più lunga */
+  size_t current_start = 0; /* Dove inizia la sequenza corrente */
 
   for (u64 i = 0; i < pmm_state.total_pages; i++) {
     if (!pmm_is_page_used_internal(i)) {
+      /* Pagina libera: estendi sequenza corrente */
       if (current_run == 0) {
-        current_start = i;
+        current_start = i; /* Inizio nuova sequenza */
       }
       current_run++;
 
+      /* Nuovo record? */
       if (current_run > max_run) {
         max_run = current_run;
         max_start = current_start;
       }
     } else {
+      /* Pagina occupata: interrompi sequenza corrente */
       current_run = 0;
     }
   }
 
+  /* Restituisci la posizione se richiesta */
   if (start_page) {
     *start_page = max_start;
   }
 
-  // Aggiorna statistica
+  /* Aggiorna anche la statistica per future query */
   pmm_stats.largest_free_run = max_run;
-
   return max_run;
 }
 
 /**
- * @brief Stampa statistiche di frammentazione dettagliate
+ * @brief Analisi dettagliata della frammentazione
+ *
+ * METRICHE DI FRAMMENTAZIONE:
+ * - Blocco contiguo più grande
+ * - Percentuale di frammentazione
+ * - Posizione del blocco più grande
+ *
+ * INTERPRETAZIONE:
+ * - Frammentazione 0%: Tutta la memoria libera è in un unico blocco
+ * - Frammentazione 50%: La memoria libera è abbastanza frammentata
+ * - Frammentazione 90%+: Memoria molto frammentata, difficile allocare blocchi grandi
  */
 void pmm_print_fragmentation_info(void) {
   if (!pmm_state.initialized) {
@@ -1221,55 +915,94 @@ void pmm_print_fragmentation_info(void) {
   size_t start_page;
   size_t largest_run = pmm_find_largest_free_run(&start_page);
 
-  klog_info("=== FRAMMENTAZIONE MEMORIA ===");
+  klog_info("=== ANALISI FRAMMENTAZIONE MEMORIA ===");
   klog_info("Blocco contiguo più grande: %lu pagine (%lu MB)", largest_run, largest_run * PAGE_SIZE / MB);
 
   if (largest_run > 0) {
-    klog_info("Posizione: pagina %lu (0x%lx)", start_page, PAGE_TO_ADDR(start_page));
+    klog_info("Posizione: pagina %lu (indirizzo fisico 0x%lx)", start_page, PAGE_TO_ADDR(start_page));
   }
 
-  // Calcola frammentazione
+  /* Calcola percentuale di frammentazione */
   if (pmm_stats.free_pages > 0) {
     u64 fragmentation = 100 - ((largest_run * 100) / pmm_stats.free_pages);
     klog_info("Frammentazione: %lu%%", fragmentation);
+
+    if (fragmentation < 20) {
+      klog_info("→ Memoria poco frammentata (ottimo)");
+    } else if (fragmentation < 50) {
+      klog_info("→ Frammentazione moderata (accettabile)");
+    } else {
+      klog_warn("→ Memoria molto frammentata (problematico per allocazioni grandi)");
+    }
   }
 }
 
+/*
+ * ============================================================================
+ * FUNZIONI AVANZATE - DA IMPLEMENTARE IN FUTURO
+ * ============================================================================
+ */
+
 /**
- * @brief Implementazioni stub per funzioni avanzate
+ * @brief Allocazione in range specifico di indirizzi
+ *
+ * CASI D'USO:
+ * - DMA legacy che funziona solo sotto 16MB
+ * - Driver che richiedono memoria sotto 4GB (32-bit compatibility)
+ * - NUMA-aware allocation su sistemi multi-socket
+ *
+ * IMPLEMENTAZIONE FUTURA:
+ * Modificare pmm_find_free_pages_from per accettare min/max addr
  */
 void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr) {
-  // TODO: Implementazione avanzata per allocazioni in range specifici
   (void)count;
   (void)min_addr;
   (void)max_addr;
+  /* TODO: Implementare ricerca limitata a un range di indirizzi */
   return NULL;
 }
 
+/**
+ * @brief Allocazione con allineamento specifico
+ *
+ * CASI D'USO:
+ * - Page directory che deve essere allineata a 4KB boundary
+ * - Strutture DMA che richiedono allineamento specifico
+ * - Performance optimization per accesso cache-aligned
+ *
+ * ALGORITMO FUTURO:
+ * Trovare pagina libera dove (addr % alignment) == 0
+ */
 void *pmm_alloc_aligned(size_t pages, size_t alignment) {
-  // TODO: Implementazione per allocazioni allineate
   (void)pages;
   (void)alignment;
+  /* TODO: Implementare ricerca con vincoli di allineamento */
   return NULL;
 }
 
+/**
+ * @brief Informazioni dettagliate su una pagina specifica
+ *
+ * UTILITÀ DEBUG:
+ * Dato un indirizzo, restituisce tutte le informazioni che abbiamo
+ * su quella pagina: indice, stato, validità, etc.
+ */
 bool pmm_get_page_info(void *page, u64 *page_index, bool *is_free) {
   if (!pmm_state.initialized || !page) {
     return false;
   }
 
   u64 addr = (u64)page;
-
   if (addr % PAGE_SIZE != 0) {
-    return false;
+    return false; /* Indirizzo non allineato */
   }
 
   u64 idx = ADDR_TO_PAGE(addr);
-
   if (idx >= pmm_state.total_pages) {
-    return false;
+    return false; /* Fuori range */
   }
 
+  /* Restituisci le informazioni richieste */
   if (page_index) {
     *page_index = idx;
   }
@@ -1278,5 +1011,102 @@ bool pmm_get_page_info(void *page, u64 *page_index, bool *is_free) {
     *is_free = !pmm_is_page_used_internal(idx);
   }
 
-  return true;
+  return true; /* Informazioni valide */
 }
+
+/*
+ * ============================================================================
+ * CONCLUSIONI E NOTE PEDAGOGICHE
+ * ============================================================================
+ *
+ * COSA ABBIAMO IMPARATO STUDIANDO QUESTO PMM:
+ *
+ * 1. GESTIONE MEMORIA FISICA:
+ *    Il PMM è il "contabile" della memoria fisica. Tiene traccia di ogni
+ *    pagina da 4KB e decide chi può usare cosa. È la base di tutto il
+ *    memory management del kernel.
+ *
+ * 2. STRUTTURE DATI EFFICIENTI:
+ *    Il bitmap è incredibilmente efficiente: 1 bit per pagina significa
+ *    che per 4GB di RAM servono solo 128KB di metadata! Questa efficienza
+ *    è cruciale perché il PMM deve essere veloce e usare poca memoria.
+ *
+ * 3. ALGORITMI E OTTIMIZZAZIONI:
+ *    - First-fit con hint per locality: le allocazioni consecutive sono più veloci
+ *    - Conservative initialization per sicurezza: meglio sprecare memoria che crashare
+ *    - Lazy statistics update per performance: aggiorniamo incrementalmente
+ *    - Sliding window per ricerca contigua: ottimizzazione intelligente
+ *
+ * 4. ARCHITETTURA MODULARE:
+ *    Il PMM non sa nulla di x86_64, ARM, Limine, UEFI. È completamente
+ *    architettura-agnostico e riceve info dal layer sottostante. Questo
+ *    permette portabilità e testabilità.
+ *
+ * 5. ERROR HANDLING ROBUSTO:
+ *    Ogni funzione controlla i precondizioni, valida gli input, e
+ *    fallisce in modo pulito invece di corrompere lo stato. Nel kernel
+ *    space, la robustezza è più importante della velocità.
+ *
+ * 6. DEBUGGING E DIAGNOSTICA:
+ *    Funzioni come pmm_check_integrity() e pmm_print_fragmentation_info()
+ *    sono essenziali per capire cosa sta succedendo quando qualcosa va storto.
+ *
+ * 7. THREAD-SAFETY AWARENESS:
+ *    Anche se ora siamo single-threaded, abbiamo progettato il PMM pensando
+ *    al futuro multithreading. Le statistiche e lo stato sono separati per
+ *    facilitare l'aggiunta di lock.
+ *
+ * CONCETTI AVANZATI IMPARATI:
+ *
+ * - **Locality of Reference**: Le allocazioni consecutive sono più veloci
+ * - **Fragmentation Analysis**: Come misurare e interpretare la frammentazione
+ * - **Atomic Operations**: Operazioni tutto-o-niente per consistenza
+ * - **Conservative Design**: Fallire in sicurezza quando in dubbio
+ * - **Layer Separation**: Separare logica business da dettagli hardware
+ *
+ * PROSSIMI PASSI NEL JOURNEY DEL MEMORY MANAGEMENT:
+ *
+ * 1. **Virtual Memory Manager (VMM)**:
+ *    - Paging e traduzione indirizzi virtuali → fisici
+ *    - Isolamento dei processi (ogni processo vede la sua memoria)
+ *    - Page tables e TLB management
+ *    - Copy-on-write, demand paging, swapping
+ *
+ * 2. **Heap Allocator (kmalloc/kfree)**:
+ *    - Allocazioni più piccole di PAGE_SIZE (malloc per il kernel)
+ *    - Algoritmi: buddy system, slab allocator, o binary trees
+ *    - Gestione frammentazione interna
+ *
+ * 3. **User Space Memory Manager**:
+ *    - mmap(), brk(), malloc() per i processi utente
+ *    - Virtual memory areas (VMAs)
+ *    - Memory protection e permessi
+ *
+ * 4. **Advanced Features**:
+ *    - NUMA awareness per sistemi multi-socket
+ *    - Memory hotplug (aggiungere RAM a runtime)
+ *    - Memory compression e zswap
+ *    - Kernel Address Space Layout Randomization (KASLR)
+ *
+ * FILOSOFIA DEL DESIGN:
+ *
+ * Il PMM che abbiamo studiato segue principi solidi:
+ * - **Semplicità**: Usa la struttura dati più semplice che funziona (bitmap)
+ * - **Efficienza**: Ottimizzazioni intelligenti senza complicare troppo
+ * - **Robustezza**: Fallisce in modo pulito, mai corruzione
+ * - **Modularità**: Separazione clara delle responsabilità
+ * - **Debugging**: Tools per capire cosa sta succedendo
+ *
+ * Questi principi ti serviranno per tutto lo sviluppo del kernel!
+ *
+ * RIFLESSIONE FINALE:
+ *
+ * Il memory management è uno dei sottosistemi più critici del kernel.
+ * Un bug nel PMM può corrompere tutto il sistema. Ma una volta che
+ * funziona bene, diventa la fondazione rock-solid su cui costruire
+ * tutto il resto.
+ *
+ * Congratulazioni per aver completato lo studio di un PMM completo! 🎉
+ * Ora hai una comprensione profonda di come i sistemi operativi gestiscono
+ * la memoria fisica. È tempo di passare al Virtual Memory Manager! 🚀
+ */

@@ -1,65 +1,47 @@
 #pragma once
-#include <lib/types.h>
 
-// Tipi di regioni di memoria da Limine v9.x
-typedef enum {
-  MEMORY_USABLE = 0,
-  MEMORY_RESERVED = 1,
-  MEMORY_ACPI_RECLAIMABLE = 2,
-  MEMORY_ACPI_NVS = 3,
-  MEMORY_BAD = 4,
-  MEMORY_BOOTLOADER_RECLAIMABLE = 5,
-  MEMORY_EXECUTABLE_AND_MODULES = 6,
-  MEMORY_FRAMEBUFFER = 7,
-} memory_type_t;
+#include <arch/memory.h>
 
-typedef struct {
-  u64 base;           // Indirizzo fisico di inizio
-  u64 length;         // Dimensione in byte
-  memory_type_t type; // Tipo di regione di memoria
-} memory_region_t;
-
-// Statistiche della memoria
-typedef struct {
-  u64 total_memory;        // Memoria totale rilevata
-  u64 usable_memory;       // Memoria disponibile per uso
-  u64 reserved_memory;     // Memoria riservata da hardware/bootloader
-  u64 executable_memory;   // Memoria usata dall'eseguibile (kernel) e moduli
-  u64 largest_free_region; // Regione libera contigua più grande
-} memory_stats_t;
-
-// Informazioni globali sulla memoria
-extern u64 memory_map_entries;
-extern memory_stats_t memory_stats;
+/*
+ *
+ * @file mm/memory.h
+ * @brief Interfaccia del layer memoria arch-indipendente
+ *
+ * Questo header definisce le funzioni offerte dal sottosistema memoria
+ * a tutto il kernel. Tutte le implementazioni dipendono dalle funzioni
+ * arch-specifiche dichiarate in arch/memory.h.
+ */
 
 /**
- * @brief Inizializza il sottosistema memoria e analizza la memory map
+ * @brief Inizializza il sottosistema memoria (arch + logica)
  */
 void memory_init(void);
 
 /**
- * @brief Stampa informazioni dettagliate sulla memory map
+ * @brief Stampa a schermo la mappa memoria rilevata (debug)
  */
 void memory_print_map(void);
 
 /**
- * @brief Ottiene le statistiche della memoria
- * @return Puntatore alla struttura delle statistiche
+ * @brief Ritorna un puntatore alle statistiche globali calcolate
+ * @return Puntatore valido fintanto che il kernel è in esecuzione
  */
 const memory_stats_t *memory_get_stats(void);
 
 /**
- * @brief Trova la regione di memoria utilizzabile più grande
- * @param base Puntatore per salvare l'indirizzo base
- * @param length Puntatore per salvare la lunghezza della regione
- * @return true se trovata, false se nessuna regione utilizzabile
+ * @brief Cerca la regione USABLE più grande rilevata
+ *
+ * @param base Puntatore dove salvare l'indirizzo base
+ * @param length Puntatore dove salvare la dimensione
+ * @return true se trovata, false altrimenti
  */
 bool memory_find_largest_region(u64 *base, u64 *length);
 
 /**
- * @brief Verifica se un range di indirizzi fisici è utilizzabile
- * @param base Indirizzo fisico di partenza
- * @param length Lunghezza della regione da verificare
- * @return true se l'intera regione è utilizzabile
+ * @brief Verifica se una regione è completamente contenuta in memoria USABLE
+ *
+ * @param base Indirizzo base
+ * @param length Lunghezza della regione
+ * @return true se l'intera regione è usabile
  */
 bool memory_is_region_usable(u64 base, u64 length);

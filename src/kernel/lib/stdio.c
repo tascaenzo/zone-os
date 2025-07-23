@@ -69,6 +69,12 @@ static int kvsprintf(char *buf, const char *fmt, va_list args) {
       fmt++;
     }
 
+    int size_t_modifier = 0;
+    if (*fmt == 'z') {
+      size_t_modifier = 1;
+      fmt++;
+    }
+
     switch (*fmt) {
     case 'd':
     case 'i':
@@ -87,16 +93,16 @@ static int kvsprintf(char *buf, const char *fmt, va_list args) {
       }
       break;
     case 'u':
-      if (long_modifier >= 2) {
-        // %llu
+      if (size_t_modifier) {
+        size_t val = va_arg(args, size_t);
+        buf += print_number(buf, (uint64_t)val, 10, 0, 0);
+      } else if (long_modifier >= 2) {
         unsigned long long val = va_arg(args, unsigned long long);
         buf += print_number(buf, (uint64_t)val, 10, 0, 0);
       } else if (long_modifier == 1) {
-        // %lu
         unsigned long val = va_arg(args, unsigned long);
         buf += print_number(buf, (uint64_t)val, 10, 0, 0);
       } else {
-        // %u
         unsigned int val = va_arg(args, unsigned int);
         buf += print_number(buf, (uint64_t)val, 10, 0, 0);
       }

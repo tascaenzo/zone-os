@@ -22,6 +22,7 @@ fi
 echo "▶️ Avvio QEMU UEFI (via -bios)..."
 exec qemu-system-x86_64 \
   -m 512M \
+  -machine q35 \
   -drive format=raw,file="$IMG" \
   -bios "$CODE" \
   -vga std \
