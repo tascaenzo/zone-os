@@ -1,5 +1,6 @@
 #include <arch/memory.h>
 #include <klib/klog.h>
+#include <klib/spinlock.h>
 #include <lib/string.h>
 #include <lib/types.h>
 #include <mm/memory.h>
@@ -63,18 +64,24 @@ typedef struct {
 /* Statistiche globali - condivise con il resto del kernel */
 static pmm_stats_t pmm_stats;
 static pmm_state_t pmm_state = {.initialized = false};
+static spinlock_t pmm_lock = SPINLOCK_INITIALIZER;
 
 /* -------------------------------------------------------------------------- */
 /*                     HINT MANAGEMENT (THREAD-SAFE READY)                    */
 /* -------------------------------------------------------------------------- */
 
-static inline void pmm_update_hint(u64 new_hint) {
-  /* TODO: aggiungere spinlock quando verrà introdotto l'SMP */
+static inline void pmm_update_hint_locked(u64 new_hint) {
   if (new_hint < pmm_state.total_pages) {
     pmm_state.next_free_hint = new_hint;
   } else {
     pmm_state.next_free_hint = 0;
   }
+}
+
+static inline void pmm_update_hint(u64 new_hint) {
+  spinlock_lock(&pmm_lock);
+  pmm_update_hint_locked(new_hint);
+  spinlock_unlock(&pmm_lock);
 }
 
 /*
@@ -454,9 +461,20 @@ pmm_result_t pmm_init(void) {
    */
   for (size_t i = 0; i < region_count; i++) {
     memory_region_t *region = &regions[i];
-    u64 start_page = ADDR_TO_PAGE(region->base);
-    u64 end_page = ADDR_TO_PAGE(region->base + region->length - 1);
+    /*
+     * Allinea gli indirizzi ai confini di pagina per evitare che porzioni
+     * parziali vengano considerate totalmente libere.
+     */
+    u64 aligned_start = PAGE_ALIGN_UP(region->base);
+    u64 aligned_end = PAGE_ALIGN_DOWN(region->base + region->length);
 
+    /* Se dopo l'allineamento non rimane almeno una pagina completa, salta */
+    if (aligned_end <= aligned_start) {
+      continue;
+    }
+
+    u64 start_page = ADDR_TO_PAGE(aligned_start);
+    u64 end_page = ADDR_TO_PAGE(aligned_end) - 1;
     switch (region->type) {
     case MEMORY_USABLE:
     case MEMORY_BOOTLOADER_RECLAIMABLE:
@@ -550,15 +568,19 @@ void *pmm_alloc_page(void) {
     return NULL;
   }
 
+  spinlock_lock(&pmm_lock);
+
   /* Precondizione: Deve esserci almeno una pagina libera */
   if (pmm_stats.free_pages == 0) {
+    spinlock_unlock(&pmm_lock);
     return NULL; /* Memoria fisica esaurita */
   }
 
   /* Cerca pagina libera usando l'hint per ottimizzazione */
   u64 page_index = pmm_find_free_page_from(pmm_state.next_free_hint);
   if (page_index >= pmm_state.total_pages) {
-    return NULL; /* Nessuna pagina trovata (non dovrebbe mai succedere se free_pages > 0) */
+    spinlock_unlock(&pmm_lock);
+    return NULL; /* Nessuna pagina trovata */
   }
 
   /* Allocazione riuscita: aggiorna stato e statistiche */
@@ -568,7 +590,8 @@ void *pmm_alloc_page(void) {
   pmm_stats.alloc_count++;
 
   /* Aggiorna hint per la prossima ricerca (località temporale) */
-  pmm_update_hint(page_index + 1);
+  pmm_update_hint_locked(page_index + 1);
+  spinlock_unlock(&pmm_lock);
 
   /* Converte indice pagina in indirizzo fisico */
   return (void *)PAGE_TO_ADDR(page_index);
@@ -590,17 +613,22 @@ void *pmm_alloc_page(void) {
 void *pmm_alloc_pages(size_t count) {
   /* Validazione parametri */
   if (!pmm_state.initialized || count == 0) {
+    spinlock_unlock(&pmm_lock);
     return NULL;
   }
 
+  spinlock_lock(&pmm_lock);
+
   /* Verifica disponibilità: servono almeno 'count' pagine libere */
   if (pmm_stats.free_pages < count) {
+    spinlock_unlock(&pmm_lock);
     return NULL;
   }
 
   /* Cerca blocco contiguo di 'count' pagine */
   u64 start_page = pmm_find_free_pages_from(pmm_state.next_free_hint, count);
   if (start_page >= pmm_state.total_pages) {
+    spinlock_unlock(&pmm_lock);
     return NULL; /* Nessun blocco contiguo disponibile */
   }
 
@@ -615,8 +643,8 @@ void *pmm_alloc_pages(size_t count) {
   pmm_stats.alloc_count++;
 
   /* Aggiorna hint con controllo overflow */
-  u64 new_hint = start_page + count;
-  pmm_update_hint(new_hint);
+  pmm_update_hint_locked(start_page + count);
+  spinlock_unlock(&pmm_lock);
 
   return (void *)PAGE_TO_ADDR(start_page);
 }
@@ -651,13 +679,17 @@ pmm_result_t pmm_free_page(void *page) {
 
   u64 page_index = ADDR_TO_PAGE(addr);
 
+  spinlock_lock(&pmm_lock);
+
   /* La pagina deve esistere nel nostro range */
   if (page_index >= pmm_state.total_pages) {
+    spinlock_unlock(&pmm_lock);
     return PMM_INVALID_ADDRESS;
   }
 
   /* Double-free detection: la pagina deve essere attualmente occupata */
   if (!pmm_is_page_used_internal(page_index)) {
+    spinlock_unlock(&pmm_lock);
     return PMM_ALREADY_FREE;
   }
 
@@ -669,8 +701,10 @@ pmm_result_t pmm_free_page(void *page) {
 
   /* Aggiorna hint se questa pagina è "più a sinistra" dell'hint corrente */
   if (page_index < pmm_state.next_free_hint) {
-    pmm_update_hint(page_index);
+    pmm_update_hint_locked(page_index);
   }
+
+  spinlock_unlock(&pmm_lock);
 
   return PMM_SUCCESS;
 }
@@ -703,8 +737,11 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
 
   u64 start_page = ADDR_TO_PAGE(addr);
 
+  spinlock_lock(&pmm_lock);
+
   /* Controlla che il blocco intero sia nel range valido */
   if (start_page + count > pmm_state.total_pages) {
+    spinlock_unlock(&pmm_lock);
     return PMM_INVALID_ADDRESS;
   }
 
@@ -715,6 +752,7 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
    */
   for (size_t i = 0; i < count; i++) {
     if (!pmm_is_page_used_internal(start_page + i)) {
+      spinlock_unlock(&pmm_lock);
       return PMM_ALREADY_FREE; /* Almeno una è già libera → errore */
     }
   }
@@ -731,8 +769,10 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
 
   /* Aggiorna hint */
   if (start_page < pmm_state.next_free_hint) {
-    pmm_update_hint(start_page);
+    pmm_update_hint_locked(start_page);
   }
+
+  spinlock_unlock(&pmm_lock);
 
   return PMM_SUCCESS;
 }
