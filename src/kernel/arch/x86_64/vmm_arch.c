@@ -1,10 +1,10 @@
 #include <arch/cpu.h>
+#include <arch/memory.h>
 #include <arch/x86_64/vmm_defs.h>
 #include <klib/klog.h>
 #include <lib/string.h>
 #include <lib/types.h>
 #include <mm/pmm.h>
-#include <arch/memory.h>
 
 /**
  * @file arch/x86_64/vmm_arch.c
@@ -224,7 +224,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     u64 pdpt_phys = VMM_X86_64_PTE_ADDR(pml4_entry->raw);
     if (!arch_memory_region_valid(pdpt_phys, PAGE_SIZE)) {
       klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
-      return NULL;
+      return (vmm_x86_64_pte_t *)NULL;
     }
     pdpt = (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
   }
@@ -252,7 +252,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     u64 pd_phys = VMM_X86_64_PTE_ADDR(pdpt_entry->raw);
     if (!arch_memory_region_valid(pd_phys, PAGE_SIZE)) {
       klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
-      return NULL;
+      return (vmm_x86_64_pte_t *)NULL;
     }
     pd = (vmm_x86_64_page_table_t *)(uptr)pd_phys;
   }
@@ -280,7 +280,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     u64 pt_phys = VMM_X86_64_PTE_ADDR(pd_entry->raw);
     if (!arch_memory_region_valid(pt_phys, PAGE_SIZE)) {
       klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
-      return NULL;
+      return (vmm_x86_64_pte_t *)NULL;
     }
     pt = (vmm_x86_64_page_table_t *)(uptr)pt_phys;
   }
