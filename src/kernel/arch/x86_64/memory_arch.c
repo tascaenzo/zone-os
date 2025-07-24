@@ -40,7 +40,7 @@
  * Costanti per statistiche e validazione
  */
 #define MIN_USABLE_MEMORY_MB 16 // Minimo 16MB per kernel funzionale
-#define MAX_MEMORY_REGIONS 512  // Limite sicurezza per evitare overflow
+#define MAX_MEMORY_REGIONS ARCH_MAX_MEMORY_REGIONS  // Mant. compatibilità
 
 /*
  * ============================================================================

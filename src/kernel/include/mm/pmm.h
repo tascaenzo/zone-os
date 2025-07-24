@@ -3,6 +3,17 @@
 #include <arch/memory.h>
 #include <lib/types.h>
 
+/* -------------------------------------------------------------------------- */
+/*                         PMM CONFIGURATION CONSTANTS                        */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Limite indicativo oltre il quale le richieste di allocazione vengono
+ * considerate sospette (1M pagine = 4GB). Utilizzato per diagnosticare bug
+ * o richieste anomale.
+ */
+#define PMM_MAX_REASONABLE_ALLOC_PAGES (1UL << 20)
+
 /**
  * @file mm/pmm.h
  * @brief Physical Memory Manager - Architecture Agnostic
@@ -233,6 +244,11 @@ void pmm_print_info(void);
  * @note Se ritorna false, il sistema potrebbe essere instabile
  */
 bool pmm_check_integrity(void);
+
+/**
+ * @brief Valida rapidamente le statistiche interne senza scansione completa
+ */
+bool pmm_validate_stats(void);
 
 /**
  * @brief Trova la sequenza più lunga di pagine libere contigue

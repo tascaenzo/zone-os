@@ -3,6 +3,17 @@
 #include <arch/memory.h>
 #include <lib/types.h>
 
+/* -------------------------------------------------------------------------- */
+/*                         VMM CONFIGURATION CONSTANTS                        */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Numero massimo di pagine che consideriamo "ragionevole" per una singola
+ * operazione di mapping. Oltre questo limite viene emesso un warning in fase
+ * di debug in quanto l'operazione potrebbe richiedere molto tempo (4GB).
+ */
+#define VMM_MAX_MAPPING_PAGES (1UL << 20)
+
 /**
  * @file mm/vmm.h
  * @brief Virtual Memory Manager - Architecture Agnostic

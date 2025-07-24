@@ -64,6 +64,19 @@ typedef struct {
 static pmm_stats_t pmm_stats;
 static pmm_state_t pmm_state = {.initialized = false};
 
+/* -------------------------------------------------------------------------- */
+/*                     HINT MANAGEMENT (THREAD-SAFE READY)                    */
+/* -------------------------------------------------------------------------- */
+
+static inline void pmm_update_hint(u64 new_hint) {
+  /* TODO: aggiungere spinlock quando verrà introdotto l'SMP */
+  if (new_hint < pmm_state.total_pages) {
+    pmm_state.next_free_hint = new_hint;
+  } else {
+    pmm_state.next_free_hint = 0;
+  }
+}
+
 /*
  * ============================================================================
  * OPERAZIONI SUL BITMAP - IL CUORE DEL PMM
@@ -502,7 +515,7 @@ pmm_result_t pmm_init(void) {
    * e marchiamo come inizializzato.
    */
   pmm_update_stats();           /* Conta tutto per avere statistiche accurate */
-  pmm_state.next_free_hint = 0; /* Inizia a cercare dall'inizio */
+  pmm_update_hint(0);           /* Inizia a cercare dall'inizio */
   pmm_state.initialized = true; /* Ora il PMM è operativo! */
 
   klog_info("PMM: Inizializzazione completata con successo!");
@@ -555,7 +568,7 @@ void *pmm_alloc_page(void) {
   pmm_stats.alloc_count++;
 
   /* Aggiorna hint per la prossima ricerca (località temporale) */
-  pmm_state.next_free_hint = page_index + 1;
+  pmm_update_hint(page_index + 1);
 
   /* Converte indice pagina in indirizzo fisico */
   return (void *)PAGE_TO_ADDR(page_index);
@@ -601,8 +614,9 @@ void *pmm_alloc_pages(size_t count) {
   pmm_stats.used_pages += count;
   pmm_stats.alloc_count++;
 
-  /* Aggiorna hint */
-  pmm_state.next_free_hint = start_page + count;
+  /* Aggiorna hint con controllo overflow */
+  u64 new_hint = start_page + count;
+  pmm_update_hint(new_hint);
 
   return (void *)PAGE_TO_ADDR(start_page);
 }
@@ -655,7 +669,7 @@ pmm_result_t pmm_free_page(void *page) {
 
   /* Aggiorna hint se questa pagina è "più a sinistra" dell'hint corrente */
   if (page_index < pmm_state.next_free_hint) {
-    pmm_state.next_free_hint = page_index;
+    pmm_update_hint(page_index);
   }
 
   return PMM_SUCCESS;
@@ -717,7 +731,7 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
 
   /* Aggiorna hint */
   if (start_page < pmm_state.next_free_hint) {
-    pmm_state.next_free_hint = start_page;
+    pmm_update_hint(start_page);
   }
 
   return PMM_SUCCESS;
@@ -841,6 +855,22 @@ bool pmm_check_integrity(void) {
   }
 
   return consistent;
+}
+
+/**
+ * @brief Valida rapidamente le statistiche PMM per rilevare anomalie
+ */
+bool pmm_validate_stats(void) {
+  u64 total_accounted = pmm_stats.free_pages + pmm_stats.used_pages;
+  if (total_accounted > pmm_stats.total_pages) {
+    klog_error("PMM: Stats inconsistent: %lu > %lu", total_accounted, pmm_stats.total_pages);
+    return false;
+  }
+  if (pmm_stats.largest_free_run > pmm_stats.free_pages) {
+    klog_error("PMM: Largest free run invalid: %lu > %lu", pmm_stats.largest_free_run, pmm_stats.free_pages);
+    return false;
+  }
+  return true;
 }
 
 /**

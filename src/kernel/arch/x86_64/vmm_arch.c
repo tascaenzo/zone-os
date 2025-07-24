@@ -1,4 +1,5 @@
 #include <arch/cpu.h>
+#include <arch/memory.h>
 #include <arch/x86_64/vmm_defs.h>
 #include <klib/klog.h>
 #include <lib/string.h>
@@ -128,10 +129,17 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
     return false;
   }
 
-  // Per ora assumiamo identity mapping per il kernel
-  // TODO: Quando avremo il kernel heap, convertiremo phys→virt appropriatamente
-  *virt_addr = (vmm_x86_64_page_table_t *)page;
   *phys_addr = (u64)page;
+
+  // Validazione indirizzo fisico
+  if (!arch_memory_region_valid(*phys_addr, PAGE_SIZE)) {
+    klog_error("x86_64_vmm: Indirizzo page table non valido: 0x%lx", *phys_addr);
+    pmm_free_page(page);
+    return false;
+  }
+
+  // Per ora assumiamo identity mapping per il kernel (TODO: mappare fisico→virtuale)
+  *virt_addr = (vmm_x86_64_page_table_t *)page;
 
   // Azzera la page table (tutte le entry non presenti)
   memset(*virt_addr, 0, PAGE_SIZE);
@@ -148,6 +156,26 @@ static void free_page_table(vmm_x86_64_page_table_t *virt_addr) {
   if (virt_addr) {
     pmm_free_page(virt_addr);
   }
+}
+
+/**
+ * @brief Libera ricorsivamente le page table a partire da un livello
+ */
+static void free_page_tables_recursive(vmm_x86_64_page_table_t *table, int level) {
+  if (!table || level <= 0)
+    return;
+
+  if (level > 1) {
+    for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
+      vmm_x86_64_pte_t *entry = &table->entries[i];
+      if (VMM_X86_64_PTE_PRESENT(entry->raw)) {
+        vmm_x86_64_page_table_t *child = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
+        free_page_tables_recursive(child, level - 1);
+      }
+    }
+  }
+
+  free_page_table(table);
 }
 
 /**
@@ -193,7 +221,12 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     }
     pml4_entry->raw = VMM_X86_64_MAKE_PTE(pdpt_phys, flags);
   } else {
-    pdpt = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(pml4_entry->raw);
+    u64 pdpt_phys = VMM_X86_64_PTE_ADDR(pml4_entry->raw);
+    if (!arch_memory_region_valid(pdpt_phys, PAGE_SIZE)) {
+      klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
+      return (vmm_x86_64_pte_t *)NULL;
+    }
+    pdpt = (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
   }
 
   // LIVELLO 2: PDPT (Page Directory Pointer Table)
@@ -216,7 +249,12 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     }
     pdpt_entry->raw = VMM_X86_64_MAKE_PTE(pd_phys, flags);
   } else {
-    pd = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(pdpt_entry->raw);
+    u64 pd_phys = VMM_X86_64_PTE_ADDR(pdpt_entry->raw);
+    if (!arch_memory_region_valid(pd_phys, PAGE_SIZE)) {
+      klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
+      return (vmm_x86_64_pte_t *)NULL;
+    }
+    pd = (vmm_x86_64_page_table_t *)(uptr)pd_phys;
   }
 
   // LIVELLO 3: PD (Page Directory)
@@ -239,7 +277,12 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     }
     pd_entry->raw = VMM_X86_64_MAKE_PTE(pt_phys, flags);
   } else {
-    pt = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(pd_entry->raw);
+    u64 pt_phys = VMM_X86_64_PTE_ADDR(pd_entry->raw);
+    if (!arch_memory_region_valid(pt_phys, PAGE_SIZE)) {
+      klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
+      return (vmm_x86_64_pte_t *)NULL;
+    }
+    pt = (vmm_x86_64_page_table_t *)(uptr)pt_phys;
   }
 
   // LIVELLO 4: PT (Page Table) - ritorna la PTE finale
@@ -349,14 +392,13 @@ void vmm_x86_64_destroy_space(vmm_space_t *space) {
 
   if (space->is_active) {
     klog_warn("x86_64_vmm: Distruggendo spazio attivo ID=%lu", space->space_id);
+    vmm_x86_64_switch_space(&kernel_space); // Force switch + TLB flush
   }
 
   klog_debug("x86_64_vmm: Distruggendo spazio ID=%lu", space->space_id);
 
-  // TODO: Implementare liberazione ricorsiva delle page table
-  // Per ora liberiamo solo la PML4
   if (space->arch.pml4) {
-    free_page_table(space->arch.pml4);
+    free_page_tables_recursive(space->arch.pml4, 4);
   }
 
   // Libera la struttura dello spazio
