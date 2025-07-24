@@ -613,7 +613,6 @@ void *pmm_alloc_page(void) {
 void *pmm_alloc_pages(size_t count) {
   /* Validazione parametri */
   if (!pmm_state.initialized || count == 0) {
-    spinlock_unlock(&pmm_lock);
     return NULL;
   }
 
@@ -1025,10 +1024,54 @@ void pmm_print_fragmentation_info(void) {
  * Modificare pmm_find_free_pages_from per accettare min/max addr
  */
 void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr) {
-  (void)count;
-  (void)min_addr;
-  (void)max_addr;
-  /* TODO: Implementare ricerca limitata a un range di indirizzi */
+  if (!pmm_state.initialized || count == 0 || max_addr <= min_addr) {
+    return NULL;
+  }
+
+  u64 start_page = ADDR_TO_PAGE(PAGE_ALIGN_UP(min_addr));
+  u64 end_page = ADDR_TO_PAGE(PAGE_ALIGN_DOWN(max_addr));
+
+  if (start_page >= pmm_state.total_pages) {
+    return NULL;
+  }
+
+  if (end_page > pmm_state.total_pages) {
+    end_page = pmm_state.total_pages;
+  }
+
+  if (start_page + count > end_page) {
+    return NULL;
+  }
+
+  spinlock_lock(&pmm_lock);
+
+  for (u64 p = start_page; p + count <= end_page; p++) {
+    bool found = true;
+    for (size_t i = 0; i < count; i++) {
+      if (pmm_is_page_used_internal(p + i)) {
+        found = false;
+        p += i;
+        break;
+      }
+    }
+
+    if (found) {
+      for (size_t i = 0; i < count; i++) {
+        pmm_mark_page_used(p + i);
+      }
+
+      pmm_stats.free_pages -= count;
+      pmm_stats.used_pages += count;
+      pmm_stats.alloc_count++;
+
+      pmm_update_hint_locked(p + count);
+      spinlock_unlock(&pmm_lock);
+
+      return (void *)PAGE_TO_ADDR(p);
+    }
+  }
+
+  spinlock_unlock(&pmm_lock);
   return NULL;
 }
 
@@ -1044,9 +1087,75 @@ void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr) {
  * Trovare pagina libera dove (addr % alignment) == 0
  */
 void *pmm_alloc_aligned(size_t pages, size_t alignment) {
-  (void)pages;
-  (void)alignment;
-  /* TODO: Implementare ricerca con vincoli di allineamento */
+  if (!pmm_state.initialized || pages == 0) {
+    return NULL;
+  }
+
+  if (alignment < PAGE_SIZE || (alignment & (alignment - 1)) != 0) {
+    return NULL;
+  }
+
+  spinlock_lock(&pmm_lock);
+
+  for (u64 p = pmm_state.next_free_hint; p + pages <= pmm_state.total_pages; p++) {
+    if (PAGE_TO_ADDR(p) % alignment != 0)
+      continue;
+
+    bool found = true;
+    for (size_t i = 0; i < pages; i++) {
+      if (pmm_is_page_used_internal(p + i)) {
+        found = false;
+        p += i;
+        break;
+      }
+    }
+
+    if (found) {
+      for (size_t i = 0; i < pages; i++) {
+        pmm_mark_page_used(p + i);
+      }
+
+      pmm_stats.free_pages -= pages;
+      pmm_stats.used_pages += pages;
+      pmm_stats.alloc_count++;
+
+      pmm_update_hint_locked(p + pages);
+      spinlock_unlock(&pmm_lock);
+
+      return (void *)PAGE_TO_ADDR(p);
+    }
+  }
+
+  for (u64 p = 0; p < pmm_state.next_free_hint && p + pages <= pmm_state.total_pages; p++) {
+    if (PAGE_TO_ADDR(p) % alignment != 0)
+      continue;
+
+    bool found = true;
+    for (size_t i = 0; i < pages; i++) {
+      if (pmm_is_page_used_internal(p + i)) {
+        found = false;
+        p += i;
+        break;
+      }
+    }
+
+    if (found) {
+      for (size_t i = 0; i < pages; i++) {
+        pmm_mark_page_used(p + i);
+      }
+
+      pmm_stats.free_pages -= pages;
+      pmm_stats.used_pages += pages;
+      pmm_stats.alloc_count++;
+
+      pmm_update_hint_locked(p + pages);
+      spinlock_unlock(&pmm_lock);
+
+      return (void *)PAGE_TO_ADDR(p);
+    }
+  }
+
+  spinlock_unlock(&pmm_lock);
   return NULL;
 }
 
