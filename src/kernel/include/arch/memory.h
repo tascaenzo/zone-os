@@ -20,6 +20,17 @@
 
 #include <lib/types.h>
 
+/* -------------------------------------------------------------------------- */
+/*                            ARCH CONSTANTS                                 */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Numero massimo di regioni di memoria gestibili dal layer architetturale.
+ * Serve per dimensionare gli array statici e prevenire overflow durante
+ * la rilevazione della memory map.
+ */
+#define ARCH_MAX_MEMORY_REGIONS 512
+
 // Inclusione automatica delle definizioni di paging arch-specifiche
 #if defined(__x86_64__) || defined(_M_X64)
 #include <arch/x86_64/paging_defs.h>

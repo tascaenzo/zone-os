@@ -98,7 +98,7 @@ static bool validate_mapping_params(vmm_space_t *space, u64 virt_addr, u64 phys_
     return false;
   }
 
-  if (page_count > (1UL << 20)) { // Limite ragionevole: 4GB
+  if (page_count > VMM_MAX_MAPPING_PAGES) { // Limite ragionevole: 4GB
     klog_warn("VMM: Richiesta mapping molto grande: %zu pagine (%zu MB)", page_count, (page_count * PAGE_SIZE) / (1024 * 1024));
   }
 
