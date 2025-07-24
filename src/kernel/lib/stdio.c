@@ -7,7 +7,7 @@ static int print_number(char *buf, uint64_t num, int base, int is_signed, int up
   static const char *digits_l = "0123456789abcdef";
   static const char *digits_u = "0123456789ABCDEF";
   const char *digits = uppercase ? digits_u : digits_l;
-  char temp[32];
+  char temp[64];
   int i = 0;
   int chars_written = 0;
 
