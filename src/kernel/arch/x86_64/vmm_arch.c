@@ -61,6 +61,8 @@ static struct vmm_space kernel_space = {
 
 static bool vmm_x86_64_initialized = false;
 static u64 next_space_id = 1;
+// Puntatore allo spazio attualmente attivo
+static struct vmm_space *active_space = &kernel_space;
 
 // Statistiche per debug
 // Statistiche per debug
@@ -322,6 +324,7 @@ void vmm_x86_64_init_paging(void) {
   kernel_space.arch.mapped_pages = 0;
   kernel_space.space_id = 0; // ID speciale per kernel
   kernel_space.is_active = true;
+  active_space = &kernel_space;
 
   // TODO: Setup identity mapping per il kernel
   // Per ora il kernel usa identity mapping (virt = phys)
@@ -428,11 +431,12 @@ void vmm_x86_64_switch_space(vmm_space_t *space) {
     return;
   }
 
-  // Marca tutti gli spazi come inattivi (semplificazione)
-  kernel_space.is_active = false;
-
-  // Attiva il nuovo spazio
+  // Aggiorna tracking dello spazio attivo
+  if (active_space) {
+    active_space->is_active = false;
+  }
   space->is_active = true;
+  active_space = (struct vmm_space *)space;
   vmm_x86_64_write_cr3(new_cr3);
 
   vmm_x86_64_stats.tlb_flushes++;
@@ -478,7 +482,21 @@ bool vmm_x86_64_map_pages(vmm_space_t *space, u64 virt_addr, u64 phys_addr, size
     vmm_x86_64_pte_t *pte = page_walk(space, curr_virt, true);
     if (!pte) {
       klog_error("x86_64_vmm: Page walk fallito per 0x%lx", curr_virt);
-      // TODO: Rollback delle mappature parziali
+      // Rollback delle mappature parziali effettuate finora
+      for (size_t j = 0; j < i; j++) {
+        u64 rb_virt = virt_addr + (j * PAGE_SIZE);
+        vmm_x86_64_pte_t *rb_pte = page_walk(space, rb_virt, false);
+        if (rb_pte && VMM_X86_64_PTE_PRESENT(rb_pte->raw)) {
+          rb_pte->raw = 0;
+          if (space->is_active) {
+            vmm_x86_64_invlpg(rb_virt);
+          }
+          space->arch.mapped_pages--;
+          vmm_x86_64_stats.pages_unmapped++;
+          if (vmm_x86_64_stats.pages_mapped > 0)
+            vmm_x86_64_stats.pages_mapped--;
+        }
+      }
       return false;
     }
 
