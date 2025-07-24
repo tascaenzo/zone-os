@@ -196,6 +196,9 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     return (vmm_x86_64_pte_t *)NULL;
   }
 
+  bool new_pdpt = false;
+  bool new_pd = false;
+
   // Estrai gli indici dai bit dell'indirizzo virtuale
   u64 pml4_idx = VMM_X86_64_PML4_INDEX(virt_addr);
   u64 pdpt_idx = VMM_X86_64_PDPT_INDEX(virt_addr);
@@ -215,6 +218,8 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     if (!alloc_page_table(&pdpt, &pdpt_phys)) {
       return (vmm_x86_64_pte_t *)NULL;
     }
+
+    new_pdpt = true;
 
     // Imposta la entry PML4 (kernel: writable, present)
     u64 flags = VMM_X86_64_PRESENT | VMM_X86_64_WRITABLE;
@@ -242,8 +247,14 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     // Crea nuovo Page Directory
     u64 pd_phys;
     if (!alloc_page_table(&pd, &pd_phys)) {
+      if (new_pdpt) {
+        free_page_table(pdpt);
+        pml4_entry->raw = 0;
+      }
       return (vmm_x86_64_pte_t *)NULL;
     }
+
+    new_pd = true;
 
     u64 flags = VMM_X86_64_PRESENT | VMM_X86_64_WRITABLE;
     if (!space->arch.is_kernel_space) {
@@ -270,6 +281,14 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
     // Crea nuovo Page Table
     u64 pt_phys;
     if (!alloc_page_table(&pt, &pt_phys)) {
+      if (new_pd) {
+        free_page_table(pd);
+        pdpt_entry->raw = 0;
+      }
+      if (new_pdpt) {
+        free_page_table(pdpt);
+        pml4_entry->raw = 0;
+      }
       return (vmm_x86_64_pte_t *)NULL;
     }
 
