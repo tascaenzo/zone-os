@@ -26,3 +26,5 @@ typedef signed long long int64_t;
 #define INT32_MAX ((int32_t)2147483647)
 #define INT64_MIN ((int64_t)-9223372036854775807LL - 1)
 #define INT64_MAX ((int64_t)9223372036854775807LL)
+
+#define SIZE_MAX ((size_t)-1)

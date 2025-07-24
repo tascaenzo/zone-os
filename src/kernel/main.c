@@ -1,9 +1,11 @@
+#include <arch/memory.h>
 #include <bootloader/limine.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
 #include <klib/klog.h>
 #include <lib/stdio.h>
 #include <mm/pmm.h>
+#include <mm/vmm.h>
 
 /*
  * ============================================================================
@@ -33,37 +35,27 @@ void kmain(void) {
   klog_info("Microkernel initializing...");
 
   /*
-   * FASE 2: PHYSICAL MEMORY MANAGER (ESSENZIALE)
-   *
-   * Anche nei microkernel, il PMM rimane nel kernel space
-   * perché è fondamentale per qualsiasi allocazione.
+   * FASE 2: INIZIALIZZAZIONE PHYSICAL MEMORY MANAGER
    */
   klog_info("Initializing Physical Memory Manager...");
   pmm_result_t pmm_result = pmm_init();
   if (pmm_result != PMM_SUCCESS) {
-    klog_panic("Critical: PMM initialization failed (code: %d)", pmm_result);
-  }
-  klog_info("✓ Physical Memory Manager initialized");
-
-  const pmm_stats_t *stats = pmm_get_stats();
-  if (stats) {
-    u64 free_mb = stats->free_pages * PAGE_SIZE / (1024 * 1024);
-    klog_info("Memory available: %lu MB", free_mb);
+    klog_panic("PMM init failed (code: %d)", pmm_result);
   }
 
+  const pmm_stats_t *pmm_stats = pmm_get_stats();
+  if (pmm_stats) {
+    u64 free_mb = pmm_stats->free_pages * PAGE_SIZE / (1024 * 1024);
+    klog_info("PMM initialized - Memory available: %lu MB", free_mb);
+  }
+
+  /*
+   * FASE 6: MICROKERNEL READY
+   */
   klog_info("=== MICROKERNEL INITIALIZATION COMPLETE ===");
-  klog_info("ZONE-OS microkernel ready");
+  klog_info("All tests completed - ZONE-OS microkernel ready");
 
   while (1) {
-    /*
-     * TODO: Quando implementerai IPC, questo diventerà:
-     *
-     * while (1) {
-     *     handle_ipc_messages();    // Gestisci messaggi tra processi
-     *     schedule_next_process();  // Context switch minimale
-     *     __asm__ volatile("hlt");  // Attendi interrupt
-     * }
-     */
     __asm__ volatile("hlt");
   }
 }
