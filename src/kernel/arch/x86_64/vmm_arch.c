@@ -5,6 +5,7 @@
 #include <lib/string.h>
 #include <lib/types.h>
 #include <mm/pmm.h>
+#include <mm/kernel_layout.h>
 
 /**
  * @file arch/x86_64/vmm_arch.c
@@ -140,8 +141,8 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
     return false;
   }
 
-  // Per ora assumiamo identity mapping per il kernel (TODO: mappare fisico→virtuale)
-  *virt_addr = (vmm_x86_64_page_table_t *)page;
+  // Usa il direct mapping per ottenere l'indirizzo virtuale della page table
+  *virt_addr = (vmm_x86_64_page_table_t *)PHYS_TO_VIRT(*phys_addr);
 
   // Azzera la page table (tutte le entry non presenti)
   memset(*virt_addr, 0, PAGE_SIZE);
@@ -171,7 +172,8 @@ static void free_page_tables_recursive(vmm_x86_64_page_table_t *table, int level
     for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
       vmm_x86_64_pte_t *entry = &table->entries[i];
       if (VMM_X86_64_PTE_PRESENT(entry->raw)) {
-        vmm_x86_64_page_table_t *child = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
+        vmm_x86_64_page_table_t *child =
+            (vmm_x86_64_page_table_t *)PHYS_TO_VIRT(VMM_X86_64_PTE_ADDR(entry->raw));
         free_page_tables_recursive(child, level - 1);
       }
     }
@@ -233,7 +235,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pdpt = (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
+    pdpt = (vmm_x86_64_page_table_t *)PHYS_TO_VIRT(pdpt_phys);
   }
 
   // LIVELLO 2: PDPT (Page Directory Pointer Table)
@@ -267,7 +269,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pd = (vmm_x86_64_page_table_t *)(uptr)pd_phys;
+    pd = (vmm_x86_64_page_table_t *)PHYS_TO_VIRT(pd_phys);
   }
 
   // LIVELLO 3: PD (Page Directory)
@@ -303,11 +305,43 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pt = (vmm_x86_64_page_table_t *)(uptr)pt_phys;
+    pt = (vmm_x86_64_page_table_t *)PHYS_TO_VIRT(pt_phys);
   }
 
   // LIVELLO 4: PT (Page Table) - ritorna la PTE finale
   return &pt->entries[pt_idx];
+}
+
+/**
+ * @brief Imposta il direct mapping della memoria fisica
+ *
+ * Mappa la memoria fisica nell'area DIRECT_MAP_BASE per
+ * permettere l'accesso diretto alle pagine allocate dal PMM.
+ */
+static void setup_kernel_direct_mapping(void) {
+    klog_info("x86_64_vmm: Configurazione direct mapping");
+
+    const pmm_stats_t *pmm_stats = pmm_get_stats();
+    if (!pmm_stats) {
+        klog_panic("x86_64_vmm: PMM non inizializzato");
+    }
+
+    u64 total_ram = pmm_stats->total_pages * PAGE_SIZE;
+    u64 map_size = (total_ram > 64UL * GB) ? 64UL * GB : total_ram;
+
+    klog_info("x86_64_vmm: Mapping %lu MB di RAM fisica", map_size / MB);
+
+    for (u64 phys_addr = 0; phys_addr < map_size; phys_addr += PAGE_SIZE) {
+        u64 virt_addr = PHYS_TO_VIRT(phys_addr);
+        u64 flags = VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL;
+
+        if (!vmm_x86_64_map_pages(&kernel_space, virt_addr, phys_addr, 1, flags)) {
+            klog_panic("x86_64_vmm: Fallito direct mapping a 0x%lx", phys_addr);
+        }
+    }
+
+    klog_info("x86_64_vmm: Direct mapping completato (0x%lx - 0x%lx)",
+              DIRECT_MAP_BASE, DIRECT_MAP_BASE + map_size);
 }
 
 /*
@@ -345,9 +379,8 @@ void vmm_x86_64_init_paging(void) {
   kernel_space.is_active = true;
   active_space = &kernel_space;
 
-  // TODO: Setup identity mapping per il kernel
-  // Per ora il kernel usa identity mapping (virt = phys)
-  // Questo andrà sostituito con un layout più sicuro
+  // Setup direct mapping per la memoria fisica
+  setup_kernel_direct_mapping();
 
   klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)", kernel_space.arch.phys_pml4);
 
