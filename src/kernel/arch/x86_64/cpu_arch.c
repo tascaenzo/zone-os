@@ -2,17 +2,8 @@
 #include <klib/klog.h>
 #include <lib/string.h>
 
-static inline void cpuid(u32 leaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
-  u32 a, b, c, d;
-  __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf));
-  if (eax)
-    *eax = a;
-  if (ebx)
-    *ebx = b;
-  if (ecx)
-    *ecx = c;
-  if (edx)
-    *edx = d;
+void cpu_cpuid(u32 leaf, u32 subleaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
+  __asm__ volatile("cpuid" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "a"(leaf), "c"(subleaf));
 }
 
 /*
@@ -23,13 +14,13 @@ static inline void cpuid(u32 leaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
 
 bool cpu_supports_nx(void) {
   u32 eax, ebx, ecx, edx;
-  cpuid(0x80000001, &eax, &ebx, &ecx, &edx);
+  cpu_cpuid(0x80000001, 0, &eax, &ebx, &ecx, &edx);
   return (edx & (1 << 20)) != 0;
 }
 
 bool cpu_supports_syscall(void) {
   u32 eax, ebx, ecx, edx;
-  cpuid(0x80000001, &eax, &ebx, &ecx, &edx);
+  cpu_cpuid(0x80000001, 0, &eax, &ebx, &ecx, &edx);
   return (edx & (1 << 11)) != 0;
 }
 
@@ -119,11 +110,9 @@ const char *cpu_get_arch_name(void) {
 const char *cpu_get_vendor(void) {
   static char vendor[13] = {0};
   u32 eax, ebx, ecx, edx;
-
-  cpuid(0x0, &eax, &ebx, &ecx, &edx);
+  cpu_cpuid(0x0, 0, &eax, &ebx, &ecx, &edx);
   *(u32 *)&vendor[0] = ebx;
   *(u32 *)&vendor[4] = edx;
   *(u32 *)&vendor[8] = ecx;
-
   return vendor;
 }
