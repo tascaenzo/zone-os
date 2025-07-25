@@ -128,7 +128,13 @@ void vmm_x86_64_enable_nx(void) {
  */
 static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr) {
   // Alloca pagina fisica tramite PMM
-  void *page = pmm_alloc_page();
+  void *page = NULL;
+  if (!direct_map_ready) {
+    // Durante l'early boot è garantita l'identity mapping solo sotto 4GB
+    page = pmm_alloc_pages_in_range(1, 0, 0x100000000ULL);
+  }
+  if (!page)
+    page = pmm_alloc_page();
   if (!page) {
     klog_error("x86_64_vmm: Impossibile allocare page table dal PMM");
     return false;
