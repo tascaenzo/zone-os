@@ -182,9 +182,13 @@ static void free_page_tables_recursive(vmm_x86_64_page_table_t *table, int level
     for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
       vmm_x86_64_pte_t *entry = &table->entries[i];
       if (VMM_X86_64_PTE_PRESENT(entry->raw)) {
-        vmm_x86_64_page_table_t *child =
-            (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(
-                VMM_X86_64_PTE_ADDR(entry->raw));
+        vmm_x86_64_page_table_t *child = direct_map_ready
+                                            ? (vmm_x86_64_page_table_t *)
+                                                  VMM_X86_64_PHYS_TO_VIRT(
+                                                      VMM_X86_64_PTE_ADDR(
+                                                          entry->raw))
+                                            : (vmm_x86_64_page_table_t *)(uptr)
+                                                  VMM_X86_64_PTE_ADDR(entry->raw);
         free_page_tables_recursive(child, level - 1);
       }
     }
@@ -246,7 +250,9 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pdpt = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pdpt_phys);
+    pdpt = direct_map_ready
+               ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pdpt_phys)
+               : (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
   }
 
   // LIVELLO 2: PDPT (Page Directory Pointer Table)
@@ -280,7 +286,9 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pd = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pd_phys);
+    pd = direct_map_ready
+             ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pd_phys)
+             : (vmm_x86_64_page_table_t *)(uptr)pd_phys;
   }
 
   // LIVELLO 3: PD (Page Directory)
@@ -316,7 +324,9 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pt = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pt_phys);
+    pt = direct_map_ready
+             ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pt_phys)
+             : (vmm_x86_64_page_table_t *)(uptr)pt_phys;
   }
 
   // LIVELLO 4: PT (Page Table) - ritorna la PTE finale
@@ -683,7 +693,9 @@ static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level,
 
     if (level > 1 && !entry->page_size) {
       vmm_x86_64_page_table_t *child =
-          (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(child_phys);
+          direct_map_ready
+              ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(child_phys)
+              : (vmm_x86_64_page_table_t *)(uptr)child_phys;
       dump_table_recursive(child, level - 1, virt_addr);
     }
   }
@@ -710,9 +722,13 @@ static bool integrity_walk(vmm_x86_64_page_table_t *table, int level,
     }
 
     if (level > 1 && !entry->page_size) {
-      vmm_x86_64_page_table_t *child =
-          (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(
-              VMM_X86_64_PTE_ADDR(entry->raw));
+      vmm_x86_64_page_table_t *child = direct_map_ready
+                                          ? (vmm_x86_64_page_table_t *)
+                                                VMM_X86_64_PHYS_TO_VIRT(
+                                                    VMM_X86_64_PTE_ADDR(
+                                                        entry->raw))
+                                          : (vmm_x86_64_page_table_t *)(uptr)
+                                                VMM_X86_64_PTE_ADDR(entry->raw);
       if (!integrity_walk(child, level - 1, kernel_space, count))
         return false;
     } else if (level == 1) {
