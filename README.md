@@ -100,6 +100,7 @@ make dev
 - [x] Output text basilare
 - [x] Build system automatizzata
 - [x] Hot-reload development
+- [x] High-half kernel mapping
 
 ### 🚧 In Sviluppo
 

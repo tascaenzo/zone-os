@@ -345,9 +345,18 @@ void vmm_x86_64_init_paging(void) {
   kernel_space.is_active = true;
   active_space = &kernel_space;
 
-  // TODO: Setup identity mapping per il kernel
-  // Per ora il kernel usa identity mapping (virt = phys)
-  // Questo andrà sostituito con un layout più sicuro
+  // Copia le mappature attualmente attive (fornite dal bootloader)
+  // così da preservare la high-half del kernel. Il CR3 corrente punta
+  // alle page table di Limine che già mappano il kernel nelle zone
+  // superiori dello spazio virtuale.
+  u64 boot_cr3 = vmm_x86_64_read_cr3();
+  vmm_x86_64_page_table_t *boot_pml4 =
+      (vmm_x86_64_page_table_t *)(uptr)boot_cr3;
+  memcpy(kernel_space.arch.pml4, boot_pml4, PAGE_SIZE);
+
+  // Attiva immediatamente le nostre nuove page table
+  vmm_x86_64_write_cr3(kernel_space.arch.phys_pml4);
+  vmm_x86_64_flush_tlb();
 
   klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)", kernel_space.arch.phys_pml4);
 
@@ -390,8 +399,12 @@ vmm_space_t *vmm_x86_64_create_space(void) {
   space->space_id = next_space_id++;
   space->is_active = false;
 
-  // TODO: Copia le mappature kernel nella parte alta dello spazio virtuale
-  // Per ora ogni spazio è completamente indipendente
+  // Copia le mappature del kernel (upper half) dalla PML4 del kernel
+  size_t kernel_idx =
+      VMM_X86_64_PML4_INDEX(VMM_X86_64_KERNEL_BASE);
+  for (size_t i = kernel_idx; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
+    space->arch.pml4->entries[i] = kernel_space.arch.pml4->entries[i];
+  }
 
   vmm_x86_64_stats.spaces_created++;
 
