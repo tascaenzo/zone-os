@@ -3,6 +3,21 @@
 #include <klib/klog.h>
 #include <lib/string.h>
 #include <lib/types.h>
+#include <arch/cpu.h>
+
+// Utility interna CPUID per controlli feature
+static inline void cpuid(u32 leaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
+  u32 a, b, c, d;
+  __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf));
+  if (eax)
+    *eax = a;
+  if (ebx)
+    *ebx = b;
+  if (ecx)
+    *ecx = c;
+  if (edx)
+    *edx = d;
+}
 
 /**
  * @file arch/x86_64/memory.c
@@ -41,6 +56,26 @@
  */
 #define MIN_USABLE_MEMORY_MB 16 // Minimo 16MB per kernel funzionale
 #define MAX_MEMORY_REGIONS ARCH_MAX_MEMORY_REGIONS  // Mant. compatibilità
+
+typedef struct {
+  u64 base;
+  u64 end;
+} mem_range_t;
+
+// Intervalli tipici di memoria MMIO riservata su PC
+static const mem_range_t mmio_ranges[] = {
+    {0x000A0000, 0x000FFFFF}, // VGA/BIOS
+    {0xFEC00000, 0xFEEFFFFF}, // IOAPIC/HPET
+    {0xFE000000, 0xFEFFFFFF}, // Firmware
+};
+
+#define MMIO_RANGE_COUNT (sizeof(mmio_ranges) / sizeof(mmio_ranges[0]))
+
+// Alcune zone comunemente riservate per ACPI/firmware
+static const mem_range_t acpi_reserved_ranges[] = {
+    {0x000E0000, 0x000FFFFF}, // ACPI RSDP / BIOS
+};
+#define ACPI_RANGE_COUNT (sizeof(acpi_reserved_ranges) / sizeof(acpi_reserved_ranges[0]))
 
 /*
  * ============================================================================
@@ -153,6 +188,11 @@ static const char *memory_type_name(memory_type_t type) {
   }
 }
 
+// Controllo sovrapposizione intervalli
+static bool ranges_overlap(u64 a_start, u64 a_end, u64 b_start, u64 b_end) {
+  return !(a_end < b_start || b_end < a_start);
+}
+
 /**
  * @brief Valida una singola regione di memoria per x86_64
  *
@@ -190,6 +230,25 @@ static bool validate_memory_region(const memory_region_t *region) {
   if (region->type == MEMORY_USABLE && region->length < PAGE_SIZE) {
     klog_debug("x86_64: Regione USABLE troppo piccola: %lu bytes", region->length);
     // Non blocchiamo, ma potrebbe non essere utile
+  }
+
+  // Verifica conflitto con intervalli MMIO noti
+  for (size_t i = 0; i < MMIO_RANGE_COUNT; i++) {
+    if (ranges_overlap(region->base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end)) {
+      klog_warn("x86_64: Regione 0x%lx-0x%lx in conflitto con MMIO 0x%lx-0x%lx", region->base,
+                end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
+      return false;
+    }
+  }
+
+  // Verifica se ricade in zone ACPI riservate
+  for (size_t i = 0; i < ACPI_RANGE_COUNT; i++) {
+    if (ranges_overlap(region->base, end_addr, acpi_reserved_ranges[i].base,
+                       acpi_reserved_ranges[i].end)) {
+      klog_warn("x86_64: Regione 0x%lx-0x%lx all'interno area ACPI 0x%lx-0x%lx", region->base,
+                end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end);
+      return false;
+    }
   }
 
   return true;
@@ -277,7 +336,8 @@ size_t arch_memory_detect_regions(memory_region_t *regions, size_t max_regions) 
 
     // Validazione regione per x86_64
     if (!validate_memory_region(region)) {
-      klog_warn("x86_64: Regione %lu non valida, saltando", i);
+      klog_warn("x86_64: Regione %lu (0x%lx-0x%lx) non valida, ignorata", i,
+                region->base, region->base + region->length - 1);
       continue;
     }
 
@@ -373,11 +433,36 @@ void arch_memory_init(void) {
     klog_warn("x86_64: Numero elevato di regioni memoria (%lu), possibile frammentazione", response->entry_count);
   }
 
-  // TODO: Qui si potrebbero aggiungere altri controlli x86_64 specifici:
-  // - Verifica supporto PAE (Physical Address Extension)
-  // - Controllo bit NX (No-Execute) supportato
-  // - Verifica limiti fisici del processore specifico
-  // - Setup MTRR (Memory Type Range Registers) se necessario
+  // Controlli hardware specifici
+  u32 eax, ebx, ecx, edx;
+
+  cpuid(1, &eax, &ebx, &ecx, &edx);
+
+  if (!(edx & (1 << 6))) {
+    klog_panic("x86_64: CPU priva di PAE, requisito indispensabile");
+  } else {
+    klog_debug("x86_64: PAE supportato");
+  }
+
+  if (!(edx & (1 << 12))) {
+    klog_warn("x86_64: MTRR non supportato dalla CPU");
+  } else {
+    klog_debug("x86_64: MTRR supportato");
+  }
+
+  if (!cpu_supports_nx()) {
+    klog_warn("x86_64: Bit NX non supportato - protezione esecuzione limitata");
+  } else {
+    klog_debug("x86_64: Bit NX supportato");
+  }
+
+  cpuid(0x80000008, &eax, NULL, NULL, NULL);
+  u32 phys_bits = eax & 0xff;
+  klog_info("x86_64: CPU supporta %u bit di indirizzo fisico", phys_bits);
+  if (phys_bits > X86_64_MAX_PHYSICAL_BITS) {
+    klog_warn("x86_64: CPU riporta %u bit fisici oltre il limite gestito (%d)",
+              phys_bits, X86_64_MAX_PHYSICAL_BITS);
+  }
 
   klog_info("x86_64: Inizializzazione memoria completata con successo");
 }
@@ -430,10 +515,25 @@ bool arch_memory_region_valid(u64 base, u64 length) {
   }
 
   // Controlli aggiuntivi x86_64 specifici
-  // TODO: Qui si potrebbero aggiungere:
-  // - Verifica che la regione non conflitti con MMIO ranges
-  // - Controllo che non sia in zone riservate per ACPI
-  // - Validazione rispetto a limiti specifici del chipset
+  for (size_t i = 0; i < MMIO_RANGE_COUNT; i++) {
+    if (ranges_overlap(base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end)) {
+      klog_debug("x86_64: Intervallo 0x%lx-0x%lx collide con MMIO 0x%lx-0x%lx", base,
+                 end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
+      return false;
+    }
+  }
+
+  for (size_t i = 0; i < ACPI_RANGE_COUNT; i++) {
+    if (ranges_overlap(base, end_addr, acpi_reserved_ranges[i].base,
+                       acpi_reserved_ranges[i].end)) {
+      klog_debug("x86_64: Intervallo 0x%lx-0x%lx in area ACPI 0x%lx-0x%lx", base,
+                 end_addr, acpi_reserved_ranges[i].base,
+                 acpi_reserved_ranges[i].end);
+      return false;
+    }
+  }
+
+  // Validazione rispetto a limiti specifici del chipset
 
   return true;
 }
