@@ -50,6 +50,21 @@ void kmain(void) {
   }
 
   /*
+   * FASE 3: INIZIALIZZAZIONE VIRTUAL MEMORY MANAGER
+   */
+  klog_info("Initializing Virtual Memory Manager...");
+  vmm_init();
+  klog_info("VMM initialized successfully");
+
+  /*
+   * FASE 4: STATISTICHE FINALI
+   */
+  const pmm_stats_t *final_stats = pmm_get_stats();
+  if (final_stats) {
+    klog_info("Final memory stats: %lu MB free, %lu MB used", final_stats->free_pages * PAGE_SIZE / (1024 * 1024), final_stats->used_pages * PAGE_SIZE / (1024 * 1024));
+  }
+
+  /*
    * FASE 6: MICROKERNEL READY
    */
   klog_info("=== MICROKERNEL INITIALIZATION COMPLETE ===");
