@@ -291,7 +291,8 @@ void pmm_print_fragmentation_info(void);
  * @return Indirizzo fisico della prima pagina nel range specificato
  * @return NULL se nessun blocco disponibile nel range
  *
- * @note IMPLEMENTAZIONE FUTURA - attualmente ritorna sempre NULL
+ * @note L'implementazione scorre il range dato cercando un blocco
+ *       contiguo di pagine libere.
  */
 void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr);
 
@@ -306,7 +307,8 @@ void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr);
  * @return Indirizzo fisico allineato al boundary specificato
  * @return NULL se non può soddisfare l'allineamento richiesto
  *
- * @note IMPLEMENTAZIONE FUTURA - attualmente ritorna sempre NULL
+ * @note L'algoritmo percorre la memoria finché non trova un indirizzo
+ *       che rispetti l'allineamento e abbia 'pages' pagine libere contigue.
  * @note alignment deve essere >= PAGE_SIZE e potenza di 2
  */
 void *pmm_alloc_aligned(size_t pages, size_t alignment);
