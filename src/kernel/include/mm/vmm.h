@@ -2,6 +2,7 @@
 
 #include <arch/memory.h>
 #include <lib/types.h>
+#include <mm/kernel_layout.h>
 
 /* -------------------------------------------------------------------------- */
 /*                         VMM CONFIGURATION CONSTANTS                        */

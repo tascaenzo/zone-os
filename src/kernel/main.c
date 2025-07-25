@@ -6,6 +6,7 @@
 #include <lib/stdio.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
+#include <mm/kernel_layout.h>
 
 /*
  * ============================================================================
@@ -47,6 +48,31 @@ void kmain(void) {
   if (pmm_stats) {
     u64 free_mb = pmm_stats->free_pages * PAGE_SIZE / (1024 * 1024);
     klog_info("PMM initialized - Memory available: %lu MB", free_mb);
+  }
+
+  klog_info("Initializing Virtual Memory Manager...");
+  vmm_init();
+  klog_info("Kernel layout validation:");
+  klog_info("  KERNEL_TEXT_BASE:   0x%016lx", KERNEL_TEXT_BASE);
+  klog_info("  DIRECT_MAP_BASE:    0x%016lx", DIRECT_MAP_BASE);
+  klog_info("  KERNEL_HEAP_BASE:   0x%016lx", KERNEL_HEAP_BASE);
+  klog_info("  VMALLOC_BASE:       0x%016lx", VMALLOC_BASE);
+
+  if (!vmm_check_integrity(vmm_kernel_space())) {
+    klog_panic("VMM integrity check failed after direct mapping setup");
+  }
+
+  klog_info("Testing direct mapping...");
+  void *test_page = pmm_alloc_page();
+  if (test_page) {
+    void *virt_page = (void *)PHYS_TO_VIRT((u64)test_page);
+    *(u32 *)virt_page = 0xDEADBEEF;
+    if (*(u32 *)virt_page == 0xDEADBEEF) {
+      klog_info("\xE2\x9C\x93 Direct mapping test passed");
+    } else {
+      klog_error("\xE2\x9C\x97 Direct mapping test failed");
+    }
+    pmm_free_page(test_page);
   }
 
   /*
