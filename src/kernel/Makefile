@@ -27,9 +27,14 @@ $(KERNEL_ELF): $(KERNEL_OBJECTS) $(LD_SCRIPT)
 	ld.lld -n -T $(LD_SCRIPT) -o $@ $(ARCH_OBJECTS) $(KERNEL_OBJECTS)
 
 # Compilazione C
+CFLAGS := -target x86_64-pc-none-elf -ffreestanding -nostdlib -nostdinc -mcmodel=kernel -DDEBUG -I./include
+ifdef VMM_BOOT_DEBUG
+CFLAGS += -DVMM_BOOT_DEBUG
+endif
+
 $(BUILD_DIR)/%.o: ./%.c
 	@mkdir -p $(dir $@)
-	clang -target x86_64-pc-none-elf -ffreestanding -nostdlib -nostdinc -mcmodel=kernel -DDEBUG -I./include -c $< -o $@
+	clang $(CFLAGS) -c $< -o $@
 
 # Compilazione ASM - .s
 $(BUILD_DIR)/%.o: ./%.s

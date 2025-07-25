@@ -620,6 +620,68 @@ bool vmm_x86_64_resolve(vmm_space_t *space, u64 virt_addr, u64 *phys_addr) {
  * Stampa informazioni dettagliate sulle page table di uno spazio.
  * Utile per debugging e analisi della memoria virtuale.
  */
+static const char *level_names[] = VMM_X86_64_LEVEL_NAMES;
+static const u64 level_sizes[] = {VMM_X86_64_PT_SIZE, VMM_X86_64_PD_SIZE,
+                                  VMM_X86_64_PDPT_SIZE,
+                                  VMM_X86_64_PML4_SIZE};
+
+static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level,
+                                 u64 virt_base) {
+  if (!table || level <= 0)
+    return;
+
+  for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
+    vmm_x86_64_pte_t *entry = &table->entries[i];
+    if (!VMM_X86_64_PTE_PRESENT(entry->raw))
+      continue;
+
+    u64 child_phys = VMM_X86_64_PTE_ADDR(entry->raw);
+    u64 virt_addr = virt_base + ((u64)i * level_sizes[level - 1]);
+
+    klog_info("[%s %3d] VA 0x%016lx -> PA 0x%016lx flags=0x%016lx",
+              level_names[level - 1], i, virt_addr, child_phys, entry->raw);
+
+    if (level > 1 && !entry->page_size) {
+      vmm_x86_64_page_table_t *child =
+          (vmm_x86_64_page_table_t *)(uptr)child_phys;
+      dump_table_recursive(child, level - 1, virt_addr);
+    }
+  }
+}
+
+static bool integrity_walk(vmm_x86_64_page_table_t *table, int level,
+                           bool kernel_space, u64 *count) {
+  if (!table || level <= 0)
+    return true;
+
+  for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
+    vmm_x86_64_pte_t *entry = &table->entries[i];
+    if (!VMM_X86_64_PTE_PRESENT(entry->raw))
+      continue;
+
+    if (!IS_PAGE_ALIGNED(VMM_X86_64_PTE_ADDR(entry->raw))) {
+      klog_error("x86_64_vmm: entry L%d[%d] non allineata", level, i);
+      return false;
+    }
+
+    if (kernel_space && (entry->raw & VMM_X86_64_USER)) {
+      klog_error("x86_64_vmm: flag USER su entry kernel L%d[%d]", level, i);
+      return false;
+    }
+
+    if (level > 1 && !entry->page_size) {
+      vmm_x86_64_page_table_t *child =
+          (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
+      if (!integrity_walk(child, level - 1, kernel_space, count))
+        return false;
+    } else if (level == 1) {
+      (*count)++;
+    }
+  }
+
+  return true;
+}
+
 void vmm_x86_64_debug_dump(vmm_space_t *space) {
   if (!space) {
     klog_info("=== VMM DEBUG: NULL SPACE ===");
@@ -633,8 +695,7 @@ void vmm_x86_64_debug_dump(vmm_space_t *space) {
   klog_info("Kernel space: %s", space->arch.is_kernel_space ? "Si" : "No");
   klog_info("Attivo: %s", space->is_active ? "Si" : "No");
 
-  // TODO: Implementare dump ricorsivo delle page table
-  // Mostrare le entry presenti a ogni livello
+  dump_table_recursive(space->arch.pml4, 4, 0);
 
   klog_info("=== END VMM DEBUG ===");
 }
@@ -681,15 +742,25 @@ bool vmm_x86_64_check_integrity(vmm_space_t *space) {
     return false;
   }
 
-  // Verifica allineamento PML4
-  if (!IS_PAGE_ALIGNED(space->arch.phys_pml4)) {
-    klog_error("x86_64_vmm: PML4 non allineata: 0x%lx", space->arch.phys_pml4);
+  // Verifica allineamento PML4 sia virtuale che fisico
+  if (!IS_PAGE_ALIGNED(space->arch.phys_pml4) ||
+      !IS_PAGE_ALIGNED((u64)space->arch.pml4)) {
+    klog_error("x86_64_vmm: PML4 non allineata: virt=%p phys=0x%lx", space->arch.pml4,
+               space->arch.phys_pml4);
     return false;
   }
 
-  // TODO: Verifiche più approfondite delle page table
+  u64 counted_pages = 0;
+  bool ok = integrity_walk(space->arch.pml4, 4, space->arch.is_kernel_space,
+                           &counted_pages);
 
-  return true;
+  if (ok && counted_pages != space->arch.mapped_pages) {
+    klog_error("x86_64_vmm: mismatch pagine mappate: %lu (contate) vs %lu (cache)",
+               counted_pages, space->arch.mapped_pages);
+    ok = false;
+  }
+
+  return ok;
 }
 
 // BINDING PER INTERFACCIA GENERICA VMM

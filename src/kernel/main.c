@@ -50,11 +50,48 @@ void kmain(void) {
   }
 
   /*
+   * TEST PMM: ALLOCAZIONE E DEALLOCAZIONE
+   */
+  void *test_page1 = pmm_alloc_page();
+  void *test_block = pmm_alloc_pages(8);
+
+  if (test_page1 && test_block) {
+    klog_info("PMM test: allocated single page at %p", test_page1);
+    klog_info("PMM test: allocated 8-page block at %p", test_block);
+
+    pmm_free_page(test_page1);
+    klog_info("PMM test: successfully deallocated single page");
+
+    pmm_result_t partial = pmm_free_pages(test_block, 8);
+    if (partial != PMM_SUCCESS) {
+      klog_info("PMM test: partial free of 6 pages rejected as expected (code: %d)", partial);
+    } else {
+      klog_warn("PMM test: partial free unexpectedly succeeded!");
+    }
+
+    pmm_result_t full = pmm_free_pages(test_block, 8);
+    if (full == PMM_SUCCESS) {
+      klog_info("PMM test: full block deallocation succeeded");
+    } else {
+      klog_warn("PMM test: full block deallocation failed (code: %d)", full);
+    }
+
+  } else {
+    klog_warn("PMM test: failed to allocate test pages");
+  }
+
+  /*
    * FASE 3: INIZIALIZZAZIONE VIRTUAL MEMORY MANAGER
    */
   klog_info("Initializing Virtual Memory Manager...");
   vmm_init();
   klog_info("VMM initialized successfully");
+
+#ifdef VMM_BOOT_DEBUG
+  klog_info("Running VMM debug routines...");
+  vmm_debug_dump(NULL);
+  vmm_check_integrity(NULL);
+#endif
 
   /*
    * FASE 4: STATISTICHE FINALI
@@ -65,7 +102,7 @@ void kmain(void) {
   }
 
   /*
-   * FASE 6: MICROKERNEL READY
+   * FASE 5: MICROKERNEL READY
    */
   klog_info("=== MICROKERNEL INITIALIZATION COMPLETE ===");
   klog_info("All tests completed - ZONE-OS microkernel ready");
