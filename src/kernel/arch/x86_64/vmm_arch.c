@@ -394,16 +394,30 @@ void vmm_x86_64_init_paging(void) {
   vmm_x86_64_initialized = true;
   vmm_x86_64_stats.spaces_created = 1; // Kernel space
 
-  const pmm_stats_t *pstats = pmm_get_stats();
-  if (pstats) {
-    u64 pages = pstats->total_pages;
-    if (!vmm_x86_64_map_pages(&kernel_space, VMM_X86_64_DIRECT_MAP, 0, pages,
-                              VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL)) {
-      klog_panic("x86_64_vmm: impossibile creare direct map");
+  memory_region_t regions[ARCH_MAX_MEMORY_REGIONS];
+  size_t region_count = arch_memory_detect_regions(regions, ARCH_MAX_MEMORY_REGIONS);
+  u64 mapped_pages = 0;
+
+  for (size_t i = 0; i < region_count; i++) {
+    memory_region_t *r = &regions[i];
+    if (r->type == MEMORY_USABLE || r->type == MEMORY_BOOTLOADER_RECLAIMABLE ||
+        r->type == MEMORY_ACPI_RECLAIMABLE) {
+      u64 base = PAGE_ALIGN_DOWN(r->base);
+      u64 end = PAGE_ALIGN_UP(r->base + r->length);
+      u64 pages = (end - base) / PAGE_SIZE;
+      if (!vmm_x86_64_map_pages(&kernel_space, VMM_X86_64_DIRECT_MAP + base, base,
+                                pages,
+                                VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL)) {
+        klog_panic("x86_64_vmm: impossibile creare direct map per 0x%lx", base);
+      }
+      mapped_pages += pages;
     }
-    direct_map_ready = true;
+  }
+
+  direct_map_ready = true;
+  if (mapped_pages > 0) {
     klog_info("x86_64_vmm: Direct map abilitato (%lu MB)",
-              (pages * PAGE_SIZE) / (1024 * 1024));
+              (mapped_pages * PAGE_SIZE) / (1024 * 1024));
   }
 }
 
