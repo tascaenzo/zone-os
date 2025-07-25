@@ -55,6 +55,11 @@ void kmain(void) {
   klog_info("Initializing Virtual Memory Manager...");
   vmm_init();
   klog_info("VMM initialized successfully");
+#ifdef VMM_BOOT_DEBUG
+  klog_info("Running VMM debug routines...");
+  vmm_debug_dump(NULL);
+  vmm_check_integrity(NULL);
+#endif
 
   /*
    * FASE 4: STATISTICHE FINALI
