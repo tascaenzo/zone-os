@@ -64,6 +64,9 @@ static u64 next_space_id = 1;
 // Puntatore allo spazio attualmente attivo
 static struct vmm_space *active_space = &kernel_space;
 
+// True quando il direct map (phys→virt) è stato creato
+static bool direct_map_ready = false;
+
 // Statistiche per debug
 // Statistiche per debug
 static struct {
@@ -140,8 +143,13 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
     return false;
   }
 
-  // Per ora assumiamo identity mapping per il kernel (TODO: mappare fisico→virtuale)
-  *virt_addr = (vmm_x86_64_page_table_t *)page;
+  if (direct_map_ready) {
+    *virt_addr =
+        (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(*phys_addr);
+  } else {
+    // Durante l'early boot il bootloader fornisce identity mapping
+    *virt_addr = (vmm_x86_64_page_table_t *)page;
+  }
 
   // Azzera la page table (tutte le entry non presenti)
   memset(*virt_addr, 0, PAGE_SIZE);
@@ -156,7 +164,10 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
  */
 static void free_page_table(vmm_x86_64_page_table_t *virt_addr) {
   if (virt_addr) {
-    pmm_free_page(virt_addr);
+    void *phys = direct_map_ready
+                     ? (void *)VMM_X86_64_VIRT_TO_PHYS(virt_addr)
+                     : (void *)virt_addr;
+    pmm_free_page(phys);
   }
 }
 
@@ -171,7 +182,9 @@ static void free_page_tables_recursive(vmm_x86_64_page_table_t *table, int level
     for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
       vmm_x86_64_pte_t *entry = &table->entries[i];
       if (VMM_X86_64_PTE_PRESENT(entry->raw)) {
-        vmm_x86_64_page_table_t *child = (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
+        vmm_x86_64_page_table_t *child =
+            (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(
+                VMM_X86_64_PTE_ADDR(entry->raw));
         free_page_tables_recursive(child, level - 1);
       }
     }
@@ -233,7 +246,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pdpt = (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
+    pdpt = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pdpt_phys);
   }
 
   // LIVELLO 2: PDPT (Page Directory Pointer Table)
@@ -267,7 +280,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pd = (vmm_x86_64_page_table_t *)(uptr)pd_phys;
+    pd = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pd_phys);
   }
 
   // LIVELLO 3: PD (Page Directory)
@@ -303,7 +316,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pt = (vmm_x86_64_page_table_t *)(uptr)pt_phys;
+    pt = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pt_phys);
   }
 
   // LIVELLO 4: PT (Page Table) - ritorna la PTE finale
@@ -358,10 +371,24 @@ void vmm_x86_64_init_paging(void) {
   vmm_x86_64_write_cr3(kernel_space.arch.phys_pml4);
   vmm_x86_64_flush_tlb();
 
-  klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)", kernel_space.arch.phys_pml4);
+  klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)",
+            kernel_space.arch.phys_pml4);
 
+  // Segna inizializzato prima di mappare il direct map
   vmm_x86_64_initialized = true;
   vmm_x86_64_stats.spaces_created = 1; // Kernel space
+
+  const pmm_stats_t *pstats = pmm_get_stats();
+  if (pstats) {
+    u64 pages = pstats->total_pages;
+    if (!vmm_x86_64_map_pages(&kernel_space, VMM_X86_64_DIRECT_MAP, 0, pages,
+                              VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL)) {
+      klog_panic("x86_64_vmm: impossibile creare direct map");
+    }
+    direct_map_ready = true;
+    klog_info("x86_64_vmm: Direct map abilitato (%lu MB)",
+              (pages * PAGE_SIZE) / (1024 * 1024));
+  }
 }
 
 /**
@@ -656,7 +683,7 @@ static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level,
 
     if (level > 1 && !entry->page_size) {
       vmm_x86_64_page_table_t *child =
-          (vmm_x86_64_page_table_t *)(uptr)child_phys;
+          (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(child_phys);
       dump_table_recursive(child, level - 1, virt_addr);
     }
   }
@@ -684,7 +711,8 @@ static bool integrity_walk(vmm_x86_64_page_table_t *table, int level,
 
     if (level > 1 && !entry->page_size) {
       vmm_x86_64_page_table_t *child =
-          (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
+          (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(
+              VMM_X86_64_PTE_ADDR(entry->raw));
       if (!integrity_walk(child, level - 1, kernel_space, count))
         return false;
     } else if (level == 1) {

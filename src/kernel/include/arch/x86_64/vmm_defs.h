@@ -93,6 +93,12 @@
 #define VMM_X86_64_KERNEL_HEAP 0xFFFF888000000000UL // -64TB (kernel heap)
 #define VMM_X86_64_DIRECT_MAP 0xFFFF888000000000UL  // Physical memory direct map
 
+// Helpers per conversione indirizzi fisici ↔ virtuali nel direct map
+#define VMM_X86_64_PHYS_TO_VIRT(addr)                                             \
+  ((void *)((u64)(addr) + VMM_X86_64_DIRECT_MAP))
+#define VMM_X86_64_VIRT_TO_PHYS(addr)                                             \
+  ((u64)(addr) - VMM_X86_64_DIRECT_MAP)
+
 // User space layout
 #define VMM_X86_64_USER_BASE 0x0000000000400000UL  // 4MB (user start)
 #define VMM_X86_64_USER_STACK 0x0000700000000000UL // 112TB (user stack)
