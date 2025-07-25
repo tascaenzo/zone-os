@@ -1,23 +1,9 @@
+#include <arch/cpu.h>
 #include <arch/memory.h>
 #include <bootloader/limine.h>
 #include <klib/klog.h>
 #include <lib/string.h>
 #include <lib/types.h>
-#include <arch/cpu.h>
-
-// Utility interna CPUID per controlli feature
-static inline void cpuid(u32 leaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
-  u32 a, b, c, d;
-  __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf));
-  if (eax)
-    *eax = a;
-  if (ebx)
-    *ebx = b;
-  if (ecx)
-    *ecx = c;
-  if (edx)
-    *edx = d;
-}
 
 /**
  * @file arch/x86_64/memory.c
@@ -54,8 +40,8 @@ static inline void cpuid(u32 leaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
 /**
  * Costanti per statistiche e validazione
  */
-#define MIN_USABLE_MEMORY_MB 16 // Minimo 16MB per kernel funzionale
-#define MAX_MEMORY_REGIONS ARCH_MAX_MEMORY_REGIONS  // Mant. compatibilità
+#define MIN_USABLE_MEMORY_MB 16                    // Minimo 16MB per kernel funzionale
+#define MAX_MEMORY_REGIONS ARCH_MAX_MEMORY_REGIONS // Mant. compatibilità
 
 typedef struct {
   u64 base;
@@ -235,18 +221,15 @@ static bool validate_memory_region(const memory_region_t *region) {
   // Verifica conflitto con intervalli MMIO noti
   for (size_t i = 0; i < MMIO_RANGE_COUNT; i++) {
     if (ranges_overlap(region->base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end)) {
-      klog_warn("x86_64: Regione 0x%lx-0x%lx in conflitto con MMIO 0x%lx-0x%lx", region->base,
-                end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
+      klog_warn("x86_64: Regione 0x%lx-0x%lx in conflitto con MMIO 0x%lx-0x%lx", region->base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
       return false;
     }
   }
 
   // Verifica se ricade in zone ACPI riservate
   for (size_t i = 0; i < ACPI_RANGE_COUNT; i++) {
-    if (ranges_overlap(region->base, end_addr, acpi_reserved_ranges[i].base,
-                       acpi_reserved_ranges[i].end)) {
-      klog_warn("x86_64: Regione 0x%lx-0x%lx all'interno area ACPI 0x%lx-0x%lx", region->base,
-                end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end);
+    if (ranges_overlap(region->base, end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end)) {
+      klog_warn("x86_64: Regione 0x%lx-0x%lx all'interno area ACPI 0x%lx-0x%lx", region->base, end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end);
       return false;
     }
   }
@@ -336,8 +319,7 @@ size_t arch_memory_detect_regions(memory_region_t *regions, size_t max_regions) 
 
     // Validazione regione per x86_64
     if (!validate_memory_region(region)) {
-      klog_warn("x86_64: Regione %lu (0x%lx-0x%lx) non valida, ignorata", i,
-                region->base, region->base + region->length - 1);
+      klog_warn("x86_64: Regione %lu (0x%lx-0x%lx) non valida, ignorata", i, region->base, region->base + region->length - 1);
       continue;
     }
 
@@ -436,7 +418,7 @@ void arch_memory_init(void) {
   // Controlli hardware specifici
   u32 eax, ebx, ecx, edx;
 
-  cpuid(1, &eax, &ebx, &ecx, &edx);
+  cpu_cpuid(1, 0, &eax, &ebx, &ecx, &edx);
 
   if (!(edx & (1 << 6))) {
     klog_panic("x86_64: CPU priva di PAE, requisito indispensabile");
@@ -456,12 +438,11 @@ void arch_memory_init(void) {
     klog_debug("x86_64: Bit NX supportato");
   }
 
-  cpuid(0x80000008, &eax, NULL, NULL, NULL);
+  cpu_cpuid(0x80000008, 0, &eax, &ebx, &ecx, &edx);
   u32 phys_bits = eax & 0xff;
   klog_info("x86_64: CPU supporta %u bit di indirizzo fisico", phys_bits);
   if (phys_bits > X86_64_MAX_PHYSICAL_BITS) {
-    klog_warn("x86_64: CPU riporta %u bit fisici oltre il limite gestito (%d)",
-              phys_bits, X86_64_MAX_PHYSICAL_BITS);
+    klog_warn("x86_64: CPU riporta %u bit fisici oltre il limite gestito (%d)", phys_bits, X86_64_MAX_PHYSICAL_BITS);
   }
 
   klog_info("x86_64: Inizializzazione memoria completata con successo");
@@ -517,18 +498,14 @@ bool arch_memory_region_valid(u64 base, u64 length) {
   // Controlli aggiuntivi x86_64 specifici
   for (size_t i = 0; i < MMIO_RANGE_COUNT; i++) {
     if (ranges_overlap(base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end)) {
-      klog_debug("x86_64: Intervallo 0x%lx-0x%lx collide con MMIO 0x%lx-0x%lx", base,
-                 end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
+      klog_debug("x86_64: Intervallo 0x%lx-0x%lx collide con MMIO 0x%lx-0x%lx", base, end_addr, mmio_ranges[i].base, mmio_ranges[i].end);
       return false;
     }
   }
 
   for (size_t i = 0; i < ACPI_RANGE_COUNT; i++) {
-    if (ranges_overlap(base, end_addr, acpi_reserved_ranges[i].base,
-                       acpi_reserved_ranges[i].end)) {
-      klog_debug("x86_64: Intervallo 0x%lx-0x%lx in area ACPI 0x%lx-0x%lx", base,
-                 end_addr, acpi_reserved_ranges[i].base,
-                 acpi_reserved_ranges[i].end);
+    if (ranges_overlap(base, end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end)) {
+      klog_debug("x86_64: Intervallo 0x%lx-0x%lx in area ACPI 0x%lx-0x%lx", base, end_addr, acpi_reserved_ranges[i].base, acpi_reserved_ranges[i].end);
       return false;
     }
   }

@@ -127,3 +127,8 @@ const char *cpu_get_arch_name(void);
  * @return Es: "GenuineIntel", "AuthenticAMD", etc.
  */
 const char *cpu_get_vendor(void);
+
+/**
+ * @brief CPUID wrapper con leaf e puntatori output
+ */
+void cpu_cpuid(u32 leaf, u32 subleaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx);
