@@ -150,8 +150,7 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
   }
 
   if (direct_map_ready) {
-    *virt_addr =
-        (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(*phys_addr);
+    *virt_addr = (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(*phys_addr);
   } else {
     // Durante l'early boot il bootloader fornisce identity mapping
     *virt_addr = (vmm_x86_64_page_table_t *)page;
@@ -170,9 +169,7 @@ static bool alloc_page_table(vmm_x86_64_page_table_t **virt_addr, u64 *phys_addr
  */
 static void free_page_table(vmm_x86_64_page_table_t *virt_addr) {
   if (virt_addr) {
-    void *phys = direct_map_ready
-                     ? (void *)VMM_X86_64_VIRT_TO_PHYS(virt_addr)
-                     : (void *)virt_addr;
+    void *phys = direct_map_ready ? (void *)VMM_X86_64_VIRT_TO_PHYS(virt_addr) : (void *)virt_addr;
     pmm_free_page(phys);
   }
 }
@@ -188,13 +185,8 @@ static void free_page_tables_recursive(vmm_x86_64_page_table_t *table, int level
     for (int i = 0; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
       vmm_x86_64_pte_t *entry = &table->entries[i];
       if (VMM_X86_64_PTE_PRESENT(entry->raw)) {
-        vmm_x86_64_page_table_t *child = direct_map_ready
-                                            ? (vmm_x86_64_page_table_t *)
-                                                  VMM_X86_64_PHYS_TO_VIRT(
-                                                      VMM_X86_64_PTE_ADDR(
-                                                          entry->raw))
-                                            : (vmm_x86_64_page_table_t *)(uptr)
-                                                  VMM_X86_64_PTE_ADDR(entry->raw);
+        vmm_x86_64_page_table_t *child = direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(VMM_X86_64_PTE_ADDR(entry->raw))
+                                                          : (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
         free_page_tables_recursive(child, level - 1);
       }
     }
@@ -256,9 +248,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PDPT address: 0x%lx", pdpt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pdpt = direct_map_ready
-               ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pdpt_phys)
-               : (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
+    pdpt = direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pdpt_phys) : (vmm_x86_64_page_table_t *)(uptr)pdpt_phys;
   }
 
   // LIVELLO 2: PDPT (Page Directory Pointer Table)
@@ -292,9 +282,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PD address: 0x%lx", pd_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pd = direct_map_ready
-             ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pd_phys)
-             : (vmm_x86_64_page_table_t *)(uptr)pd_phys;
+    pd = direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pd_phys) : (vmm_x86_64_page_table_t *)(uptr)pd_phys;
   }
 
   // LIVELLO 3: PD (Page Directory)
@@ -330,9 +318,7 @@ static vmm_x86_64_pte_t *page_walk(vmm_space_t *space, u64 virt_addr, bool creat
       klog_error("x86_64_vmm: Invalid PT address: 0x%lx", pt_phys);
       return (vmm_x86_64_pte_t *)NULL;
     }
-    pt = direct_map_ready
-             ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pt_phys)
-             : (vmm_x86_64_page_table_t *)(uptr)pt_phys;
+    pt = direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(pt_phys) : (vmm_x86_64_page_table_t *)(uptr)pt_phys;
   }
 
   // LIVELLO 4: PT (Page Table) - ritorna la PTE finale
@@ -379,16 +365,14 @@ void vmm_x86_64_init_paging(void) {
   // alle page table di Limine che già mappano il kernel nelle zone
   // superiori dello spazio virtuale.
   u64 boot_cr3 = vmm_x86_64_read_cr3();
-  vmm_x86_64_page_table_t *boot_pml4 =
-      (vmm_x86_64_page_table_t *)(uptr)boot_cr3;
+  vmm_x86_64_page_table_t *boot_pml4 = (vmm_x86_64_page_table_t *)(uptr)boot_cr3;
   memcpy(kernel_space.arch.pml4, boot_pml4, PAGE_SIZE);
 
   // Attiva immediatamente le nostre nuove page table
   vmm_x86_64_write_cr3(kernel_space.arch.phys_pml4);
   vmm_x86_64_flush_tlb();
 
-  klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)",
-            kernel_space.arch.phys_pml4);
+  klog_info("x86_64_vmm: Spazio kernel creato (PML4 fisico: 0x%016lx)", kernel_space.arch.phys_pml4);
 
   // Segna inizializzato prima di mappare il direct map
   vmm_x86_64_initialized = true;
@@ -400,14 +384,11 @@ void vmm_x86_64_init_paging(void) {
 
   for (size_t i = 0; i < region_count; i++) {
     memory_region_t *r = &regions[i];
-    if (r->type == MEMORY_USABLE || r->type == MEMORY_BOOTLOADER_RECLAIMABLE ||
-        r->type == MEMORY_ACPI_RECLAIMABLE) {
+    if (r->type == MEMORY_USABLE || r->type == MEMORY_BOOTLOADER_RECLAIMABLE || r->type == MEMORY_ACPI_RECLAIMABLE) {
       u64 base = PAGE_ALIGN_DOWN(r->base);
       u64 end = PAGE_ALIGN_UP(r->base + r->length);
       u64 pages = (end - base) / PAGE_SIZE;
-      if (!vmm_x86_64_map_pages(&kernel_space, VMM_X86_64_DIRECT_MAP + base, base,
-                                pages,
-                                VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL)) {
+      if (!vmm_x86_64_map_pages(&kernel_space, VMM_X86_64_DIRECT_MAP + base, base, pages, VMM_FLAG_READ | VMM_FLAG_WRITE | VMM_FLAG_GLOBAL)) {
         klog_panic("x86_64_vmm: impossibile creare direct map per 0x%lx", base);
       }
       mapped_pages += pages;
@@ -416,8 +397,7 @@ void vmm_x86_64_init_paging(void) {
 
   direct_map_ready = true;
   if (mapped_pages > 0) {
-    klog_info("x86_64_vmm: Direct map abilitato (%lu MB)",
-              (mapped_pages * PAGE_SIZE) / (1024 * 1024));
+    klog_info("x86_64_vmm: Direct map abilitato (%lu MB)", (mapped_pages * PAGE_SIZE) / (1024 * 1024));
   }
 }
 
@@ -457,8 +437,7 @@ vmm_space_t *vmm_x86_64_create_space(void) {
   space->is_active = false;
 
   // Copia le mappature del kernel (upper half) dalla PML4 del kernel
-  size_t kernel_idx =
-      VMM_X86_64_PML4_INDEX(VMM_X86_64_KERNEL_BASE);
+  size_t kernel_idx = VMM_X86_64_PML4_INDEX(VMM_X86_64_KERNEL_BASE);
   for (size_t i = kernel_idx; i < VMM_X86_64_ENTRIES_PER_TABLE; i++) {
     space->arch.pml4->entries[i] = kernel_space.arch.pml4->entries[i];
   }
@@ -541,37 +520,33 @@ void vmm_x86_64_switch_space(vmm_space_t *space) {
  */
 bool vmm_x86_64_map_pages(vmm_space_t *space, u64 virt_addr, u64 phys_addr, size_t page_count, u64 flags) {
   if (!space || !vmm_x86_64_initialized) {
-    klog_error("x86_64_vmm: Parametri non validi per map_pages");
+    // klog_error("x86_64_vmm: Parametri non validi per map_pages");
     return false;
   }
 
-  // Verifica allineamento
   if (!IS_PAGE_ALIGNED(virt_addr) || !IS_PAGE_ALIGNED(phys_addr)) {
-    klog_error("x86_64_vmm: Indirizzi non allineati: virt=0x%lx, phys=0x%lx", virt_addr, phys_addr);
+    // klog_error("x86_64_vmm: Indirizzi non allineati: virt=0x%lx, phys=0x%lx", virt_addr, phys_addr);
     return false;
   }
 
-  // Verifica che l'indirizzo virtuale sia canonico
   if (!VMM_X86_64_IS_CANONICAL(virt_addr)) {
-    klog_error("x86_64_vmm: Indirizzo virtuale non canonico: 0x%lx", virt_addr);
+    // klog_error("x86_64_vmm: Indirizzo virtuale non canonico: 0x%lx", virt_addr);
     return false;
   }
 
-  // Converti flag generici in flag x86_64
   u64 x86_flags = vmm_x86_64_convert_flags(flags);
 
-  klog_debug("x86_64_vmm: Mapping %zu pagine: 0x%lx→0x%lx (flags=0x%lx)", page_count, virt_addr, phys_addr, x86_flags);
+  // klog_debug("x86_64_vmm: Mapping %zu pagine: 0x%lx→0x%lx (flags=0x%lx)", page_count, virt_addr, phys_addr, x86_flags);
 
-  // Mappa ogni pagina individualmente
+  bool need_tlb_flush = false;
+
   for (size_t i = 0; i < page_count; i++) {
     u64 curr_virt = virt_addr + (i * PAGE_SIZE);
     u64 curr_phys = phys_addr + (i * PAGE_SIZE);
 
-    // Trova/crea la PTE per questo indirizzo virtuale
     vmm_x86_64_pte_t *pte = page_walk(space, curr_virt, true);
     if (!pte) {
-      klog_error("x86_64_vmm: Page walk fallito per 0x%lx", curr_virt);
-      // Rollback delle mappature parziali effettuate finora
+      // klog_error("x86_64_vmm: Page walk fallito per 0x%lx", curr_virt);
       for (size_t j = 0; j < i; j++) {
         u64 rb_virt = virt_addr + (j * PAGE_SIZE);
         vmm_x86_64_pte_t *rb_pte = page_walk(space, rb_virt, false);
@@ -589,24 +564,23 @@ bool vmm_x86_64_map_pages(vmm_space_t *space, u64 virt_addr, u64 phys_addr, size
       return false;
     }
 
-    // Verifica che la pagina non sia già mappata
     if (VMM_X86_64_PTE_PRESENT(pte->raw)) {
       klog_warn("x86_64_vmm: Pagina 0x%lx già mappata (sovrascrittura)", curr_virt);
     }
 
-    // Imposta la PTE
     pte->raw = VMM_X86_64_MAKE_PTE(curr_phys, x86_flags);
 
-    // Invalida la pagina nel TLB se lo spazio è attivo
-    if (space->is_active) {
-      vmm_x86_64_invlpg(curr_virt);
-    }
+    need_tlb_flush = need_tlb_flush || space->is_active;
 
     space->arch.mapped_pages++;
     vmm_x86_64_stats.pages_mapped++;
   }
 
-  klog_debug("x86_64_vmm: Mapping completato con successo");
+  if (need_tlb_flush && space->is_active) {
+    vmm_x86_64_flush_tlb();
+  }
+
+  // klog_debug("x86_64_vmm: Mapping completato con successo");
   return true;
 }
 
@@ -691,12 +665,9 @@ bool vmm_x86_64_resolve(vmm_space_t *space, u64 virt_addr, u64 *phys_addr) {
  * Utile per debugging e analisi della memoria virtuale.
  */
 static const char *level_names[] = VMM_X86_64_LEVEL_NAMES;
-static const u64 level_sizes[] = {VMM_X86_64_PT_SIZE, VMM_X86_64_PD_SIZE,
-                                  VMM_X86_64_PDPT_SIZE,
-                                  VMM_X86_64_PML4_SIZE};
+static const u64 level_sizes[] = {VMM_X86_64_PT_SIZE, VMM_X86_64_PD_SIZE, VMM_X86_64_PDPT_SIZE, VMM_X86_64_PML4_SIZE};
 
-static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level,
-                                 u64 virt_base) {
+static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level, u64 virt_base) {
   if (!table || level <= 0)
     return;
 
@@ -708,21 +679,16 @@ static void dump_table_recursive(vmm_x86_64_page_table_t *table, int level,
     u64 child_phys = VMM_X86_64_PTE_ADDR(entry->raw);
     u64 virt_addr = virt_base + ((u64)i * level_sizes[level - 1]);
 
-    klog_info("[%s %3d] VA 0x%016lx -> PA 0x%016lx flags=0x%016lx",
-              level_names[level - 1], i, virt_addr, child_phys, entry->raw);
+    klog_info("[%s %3d] VA 0x%016lx -> PA 0x%016lx flags=0x%016lx", level_names[level - 1], i, virt_addr, child_phys, entry->raw);
 
     if (level > 1 && !entry->page_size) {
-      vmm_x86_64_page_table_t *child =
-          direct_map_ready
-              ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(child_phys)
-              : (vmm_x86_64_page_table_t *)(uptr)child_phys;
+      vmm_x86_64_page_table_t *child = direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(child_phys) : (vmm_x86_64_page_table_t *)(uptr)child_phys;
       dump_table_recursive(child, level - 1, virt_addr);
     }
   }
 }
 
-static bool integrity_walk(vmm_x86_64_page_table_t *table, int level,
-                           bool kernel_space, u64 *count) {
+static bool integrity_walk(vmm_x86_64_page_table_t *table, int level, bool kernel_space, u64 *count) {
   if (!table || level <= 0)
     return true;
 
@@ -742,13 +708,8 @@ static bool integrity_walk(vmm_x86_64_page_table_t *table, int level,
     }
 
     if (level > 1 && !entry->page_size) {
-      vmm_x86_64_page_table_t *child = direct_map_ready
-                                          ? (vmm_x86_64_page_table_t *)
-                                                VMM_X86_64_PHYS_TO_VIRT(
-                                                    VMM_X86_64_PTE_ADDR(
-                                                        entry->raw))
-                                          : (vmm_x86_64_page_table_t *)(uptr)
-                                                VMM_X86_64_PTE_ADDR(entry->raw);
+      vmm_x86_64_page_table_t *child =
+          direct_map_ready ? (vmm_x86_64_page_table_t *)VMM_X86_64_PHYS_TO_VIRT(VMM_X86_64_PTE_ADDR(entry->raw)) : (vmm_x86_64_page_table_t *)(uptr)VMM_X86_64_PTE_ADDR(entry->raw);
       if (!integrity_walk(child, level - 1, kernel_space, count))
         return false;
     } else if (level == 1) {
@@ -820,20 +781,16 @@ bool vmm_x86_64_check_integrity(vmm_space_t *space) {
   }
 
   // Verifica allineamento PML4 sia virtuale che fisico
-  if (!IS_PAGE_ALIGNED(space->arch.phys_pml4) ||
-      !IS_PAGE_ALIGNED((u64)space->arch.pml4)) {
-    klog_error("x86_64_vmm: PML4 non allineata: virt=%p phys=0x%lx", space->arch.pml4,
-               space->arch.phys_pml4);
+  if (!IS_PAGE_ALIGNED(space->arch.phys_pml4) || !IS_PAGE_ALIGNED((u64)space->arch.pml4)) {
+    klog_error("x86_64_vmm: PML4 non allineata: virt=%p phys=0x%lx", space->arch.pml4, space->arch.phys_pml4);
     return false;
   }
 
   u64 counted_pages = 0;
-  bool ok = integrity_walk(space->arch.pml4, 4, space->arch.is_kernel_space,
-                           &counted_pages);
+  bool ok = integrity_walk(space->arch.pml4, 4, space->arch.is_kernel_space, &counted_pages);
 
   if (ok && counted_pages != space->arch.mapped_pages) {
-    klog_error("x86_64_vmm: mismatch pagine mappate: %lu (contate) vs %lu (cache)",
-               counted_pages, space->arch.mapped_pages);
+    klog_error("x86_64_vmm: mismatch pagine mappate: %lu (contate) vs %lu (cache)", counted_pages, space->arch.mapped_pages);
     ok = false;
   }
 
