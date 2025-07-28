@@ -2,6 +2,7 @@
 
 #include <klib/bitmap.h>
 #include <klib/list.h>
+#include <klib/spinlock.h>
 #include <lib/stdbool.h>
 #include <lib/types.h>
 
@@ -14,8 +15,8 @@
  *
  * DESIGN:
  * - Ordine minimo: 12 (4KB pages)
- * - Ordine massimo: 16 (64KB blocks)
- * - Range: 4KB - 64KB in potenze di 2
+ * - Ordine massimo: 20 (1MB blocks)
+ * - Range: 4KB - 1MB in potenze di 2
  * - Coalescing automatico dei blocchi buddy
  * - Bitmap per tracking allocazioni
  *
@@ -40,7 +41,7 @@
 
 /* Dimensioni comode per calcoli */
 #define BUDDY_MIN_BLOCK_SIZE (1UL << BUDDY_MIN_ORDER) /* 4KB */
-#define BUDDY_MAX_BLOCK_SIZE (1UL << BUDDY_MAX_ORDER) /* 64KB */
+#define BUDDY_MAX_BLOCK_SIZE (1UL << BUDDY_MAX_ORDER) /* 1MB */
 
 /* Verifica validità ordine */
 #define BUDDY_VALID_ORDER(order) ((order) >= BUDDY_MIN_ORDER && (order) <= BUDDY_MAX_ORDER)
@@ -58,10 +59,19 @@
  * di ogni blocco libero. Per questo il BUDDY_MIN_ORDER deve
  * essere almeno sizeof(buddy_block_t).
  */
+/* Magic numbers to detect corruption */
+#define BUDDY_ALLOC_MAGIC 0xA5
+#define BUDDY_FREE_MAGIC  0x5A
+
+typedef struct buddy_block_header {
+  u8 order; /* Ordine (dimensione) del blocco */
+  u8 magic; /* Stato del blocco (alloc/free) */
+} __attribute__((packed)) buddy_block_header_t;
+
 typedef struct buddy_block {
-  list_node_t node; /* Nodo per concatenamento in free list */
-  u8 order;         /* Ordine (dimensione) di questo blocco */
-  u8 _reserved[3];  /* Padding per allineamento */
+  buddy_block_header_t header; /* Deve trovarsi ad offset 0 */
+  u16 _reserved;               /* Padding per allineamento */
+  list_node_t node;            /* Nodo per concatenamento in free list */
 } buddy_block_t;
 
 /**
@@ -76,6 +86,7 @@ typedef struct {
 
   list_node_t free_lists[BUDDY_MAX_ORDER + 1]; /* Free lists per ogni ordine [0..BUDDY_MAX_ORDER] */
   bitmap_t allocation_map;                     /* Bitmap per tracciare blocchi allocati */
+  spinlock_t lock;   /* Protezione per accesso concorrente */
 
   /* Statistiche (opzionali per debug) */
   u64 total_allocs;  /* Numero totale di allocazioni */
@@ -138,19 +149,18 @@ u64 buddy_alloc(buddy_allocator_t *allocator, size_t size);
  * adiacenti per ridurre la frammentazione.
  *
  * @param allocator Allocatore buddy
- * @param addr Indirizzo fisico del blocco (deve essere quello ritornato da buddy_alloc)
- * @param size Dimensione originale richiesta nell'allocazione
+ * @param addr Indirizzo fisico del blocco (ritornato da buddy_alloc)
  *
- * @note È FONDAMENTALE passare la stessa size usata in buddy_alloc().
- *       Size sbagliata può causare corruzione dell'allocatore.
+ * L'ordine originale viene letto dall'header del blocco, quindi
+ * non è necessario specificare la dimensione.
  *
  * @note La funzione verifica automaticamente l'integrità e logga errori
  *       se rileva parametri inconsistenti.
  *
  * @example
- *   buddy_free(&allocator, addr, 8192);  // Libera blocco da 8KB
- */
-void buddy_free(buddy_allocator_t *allocator, u64 addr, size_t size);
+ *   buddy_free(&allocator, addr);  // Libera blocco
+*/
+void buddy_free(buddy_allocator_t *allocator, u64 addr);
 
 /*
  * ============================================================================
