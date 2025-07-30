@@ -1,6 +1,7 @@
 #pragma once
 
 #include <klib/list.h>
+#include <klib/spinlock.h>
 #include <lib/types.h>
 
 /**
@@ -118,6 +119,8 @@ typedef struct slab_cache {
   /* Cache coloring per ottimizzazione CPU cache */
   u32 color_offset; /* Offset colore corrente */
   u32 color_range;  /* Range colori disponibili */
+
+  spinlock_t lock; /* Protegge operazioni sulla cache */
 
   u32 magic; /* Magic per debugging */
 } slab_cache_t;
