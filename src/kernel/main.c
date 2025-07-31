@@ -92,6 +92,7 @@ void kmain(void) {
    * FASE 5: TEST HEAP COMPLETI
    */
   heap_init();
+  memory_late_init();
 
   /*
    * FASE 6: STATISTICHE FINALI

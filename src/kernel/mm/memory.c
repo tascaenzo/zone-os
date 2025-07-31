@@ -1,9 +1,13 @@
 #include <klib/klog.h>
 #include <lib/string.h>
 #include <mm/memory.h>
+#include <mm/heap/heap.h>
 
-// Array contenente tutte le regioni di memoria rilevate
-memory_region_t regions[MAX_REGIONS];
+// Array temporaneo statico usato prima dell'inizializzazione dello heap
+static memory_region_t temp_regions[ARCH_MAX_MEMORY_REGIONS];
+
+// Puntatore alle regioni attualmente in uso
+memory_region_t *regions = temp_regions;
 
 // Numero di regioni effettivamente valide rilevate
 size_t region_count = 0;
@@ -23,7 +27,8 @@ void memory_init(void) {
 
   arch_memory_init();
 
-  region_count = arch_memory_detect_regions(regions, MAX_REGIONS);
+  region_count = arch_memory_detect_regions(temp_regions, ARCH_MAX_MEMORY_REGIONS);
+  regions = temp_regions;
   klog_info("Rilevate %zu regioni di memoria", region_count);
   if (region_count == 0) {
     klog_panic("[mem] Nessuna regione valida rilevata");
@@ -32,6 +37,24 @@ void memory_init(void) {
   arch_memory_get_stats(&stats);
 
   klog_info("[mem] %zu regioni rilevate, totale: %lu MiB", region_count, stats.total_memory / (1024 * 1024));
+}
+
+/**
+ * @brief Alloca dinamicamente le regioni dopo l'inizializzazione dello heap
+ */
+void memory_late_init(void) {
+  if (regions != temp_regions)
+    return; // già riallocato
+
+  memory_region_t *dyn = kmalloc(region_count * sizeof(memory_region_t));
+  if (!dyn) {
+    klog_panic("[mem] Impossibile allocare memoria per le regioni");
+    return;
+  }
+
+  memcpy(dyn, temp_regions, region_count * sizeof(memory_region_t));
+  regions = dyn;
+  klog_info("[mem] Tabella regioni spostata nello heap (%zu entries)", region_count);
 }
 
 /**

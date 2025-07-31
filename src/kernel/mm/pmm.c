@@ -332,8 +332,8 @@ pmm_result_t pmm_init(void) {
    * Chiediamo al layer architetturale: "Dimmi che memoria abbiamo!"
    * Risposta: array di regioni con tipo, base, e dimensione.
    */
-  memory_region_t regions[MAX_REGIONS];
-  size_t region_count = arch_memory_detect_regions(regions, MAX_REGIONS);
+  memory_region_t regions[ARCH_MAX_MEMORY_REGIONS];
+  size_t region_count = arch_memory_detect_regions(regions, ARCH_MAX_MEMORY_REGIONS);
 
   if (region_count == 0) {
     klog_error("PMM: Il layer architetturale non ha trovato memoria!");
