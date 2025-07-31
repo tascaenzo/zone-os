@@ -190,6 +190,8 @@ static bool ranges_overlap(u64 a_start, u64 a_end, u64 b_start, u64 b_end) {
  */
 static bool validate_memory_region(const memory_region_t *region) {
   if (!region) {
+    klog_debug("validate_memory_region(): regione scartata - base=0x%lx size=0x%lx tipo=%d", region->base, region->length, region->type);
+
     return false;
   }
 
@@ -324,8 +326,8 @@ size_t arch_memory_detect_regions(memory_region_t *regions, size_t max_regions) 
     }
 
     // Debug logging dettagliato per la regione
-    klog_debug("x86_64: Regione %zu: 0x%016lx-0x%016lx (%lu MB) %s", regions_count, region->base, region->base + region->length - 1, region->length / MB,
-               memory_type_name(region->type));
+    // klog_debug("x86_64: Regione %zu: 0x%016lx-0x%016lx (%lu MB) %s", regions_count, region->base, region->base + region->length - 1, region->length / MB,
+    //           memory_type_name(region->type));
 
     /*
      * AGGIORNAMENTO STATISTICHE durante la scansione

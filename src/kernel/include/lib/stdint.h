@@ -12,6 +12,10 @@ typedef signed short int16_t;
 typedef signed int int32_t;
 typedef signed long long int64_t;
 
+// Tipi interi usati per cast sicuro tra puntatori e interi (dimensione >= sizeof(void*))
+typedef unsigned long long uintptr_t;
+typedef long long intptr_t;
+
 // Limiti
 #define UINT8_MAX ((uint8_t)0xFF)
 #define UINT16_MAX ((uint16_t)0xFFFF)

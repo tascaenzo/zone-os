@@ -5,6 +5,8 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 
+#define KERNEL_BASE 0xFFFF800000000000ULL
+
 /**
  * @file mm/vmm.c
  * @brief Virtual Memory Manager - Implementazione architecture-agnostic THREAD-SAFE
@@ -44,6 +46,8 @@ extern void arch_vmm_unmap_pages(vmm_space_t *space, u64 virt_addr, size_t page_
 extern bool arch_vmm_resolve(vmm_space_t *space, u64 virt_addr, u64 *phys_addr);
 extern void arch_vmm_debug_dump(vmm_space_t *space);
 extern bool arch_vmm_check_integrity(vmm_space_t *space);
+extern void *vmm_phys_to_virt(u64 phys_addr);
+extern u64 vmm_virt_to_phys(u64 virt_addr);
 
 /*
  * ============================================================================
@@ -590,4 +594,12 @@ void vmm_print_info(void) {
   klog_info("Mappings totali: %lu", mappings);
   klog_info("Unmappings totali: %lu", unmappings);
   klog_info("=======================");
+}
+
+void *vmm_phys_to_virt(u64 phys_addr) {
+  return (void *)(phys_addr + KERNEL_BASE);
+}
+
+u64 vmm_virt_to_phys(u64 virt_addr) {
+  return (u64)virt_addr - KERNEL_BASE;
 }

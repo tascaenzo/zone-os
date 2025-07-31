@@ -332,7 +332,6 @@ pmm_result_t pmm_init(void) {
    * Chiediamo al layer architetturale: "Dimmi che memoria abbiamo!"
    * Risposta: array di regioni con tipo, base, e dimensione.
    */
-#define MAX_REGIONS 512
   memory_region_t regions[MAX_REGIONS];
   size_t region_count = arch_memory_detect_regions(regions, MAX_REGIONS);
 

@@ -61,7 +61,7 @@
  */
 /* Magic numbers to detect corruption */
 #define BUDDY_ALLOC_MAGIC 0xA5
-#define BUDDY_FREE_MAGIC  0x5A
+#define BUDDY_FREE_MAGIC 0x5A
 
 typedef struct buddy_block_header {
   u8 order; /* Ordine (dimensione) del blocco */
@@ -86,7 +86,7 @@ typedef struct {
 
   list_node_t free_lists[BUDDY_MAX_ORDER + 1]; /* Free lists per ogni ordine [0..BUDDY_MAX_ORDER] */
   bitmap_t allocation_map;                     /* Bitmap per tracciare blocchi allocati */
-  spinlock_t lock;   /* Protezione per accesso concorrente */
+  spinlock_t lock;                             /* Protezione per accesso concorrente */
 
   /* Statistiche (opzionali per debug) */
   u64 total_allocs;  /* Numero totale di allocazioni */
@@ -119,7 +119,7 @@ typedef struct {
  * @note La funzione allinea automaticamente la size_in_bytes verso il basso
  *       al multiplo più vicino di BUDDY_MIN_BLOCK_SIZE.
  */
-void buddy_init(buddy_allocator_t *allocator, u64 base_addr, u64 size_in_bytes, u64 *bitmap_storage, size_t bitmap_bits);
+bool buddy_init(buddy_allocator_t *allocator, u64 base_addr, u64 size_in_bytes, u64 *bitmap_storage, size_t bitmap_bits);
 
 /**
  * @brief Alloca un blocco di memoria contigua
@@ -159,7 +159,7 @@ u64 buddy_alloc(buddy_allocator_t *allocator, size_t size);
  *
  * @example
  *   buddy_free(&allocator, addr);  // Libera blocco
-*/
+ */
 void buddy_free(buddy_allocator_t *allocator, u64 addr);
 
 /*

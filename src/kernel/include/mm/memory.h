@@ -11,6 +11,10 @@
  * a tutto il kernel. Tutte le implementazioni dipendono dalle funzioni
  * arch-specifiche dichiarate in arch/memory.h.
  */
+#define MAX_REGIONS 512 // Limite massimo di regioni supportate nel kernel
+
+extern memory_region_t regions[];
+extern size_t region_count;
 
 /**
  * @brief Inizializza il sottosistema memoria (arch + logica)

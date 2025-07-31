@@ -207,3 +207,19 @@ void vmm_debug_dump(vmm_space_t *space);
  * @return true se integro
  */
 bool vmm_check_integrity(vmm_space_t *space);
+
+/**
+ * @brief Converte un indirizzo fisico in uno virtuale (solo per il kernel)
+ *
+ * @param phys_addr Indirizzo fisico
+ * @return Indirizzo virtuale corrispondente
+ */
+void *vmm_phys_to_virt(u64 phys_addr);
+
+/**
+ * @brief Converte un indirizzo virtuale in fisico
+ *
+ * @param virt_addr Indirizzo virtuale
+ * @return Indirizzo fisico corrispondente
+ */
+u64 vmm_virt_to_phys(u64 virt_addr);

@@ -2,13 +2,11 @@
 #include <lib/string.h>
 #include <mm/memory.h>
 
-#define MAX_REGIONS 512 // Limite massimo di regioni supportate nel kernel
-
 // Array contenente tutte le regioni di memoria rilevate
-static memory_region_t regions[MAX_REGIONS];
+memory_region_t regions[MAX_REGIONS];
 
 // Numero di regioni effettivamente valide rilevate
-static size_t region_count = 0;
+size_t region_count = 0;
 
 // Statistiche aggregate della memoria del sistema
 static memory_stats_t stats;
@@ -26,6 +24,7 @@ void memory_init(void) {
   arch_memory_init();
 
   region_count = arch_memory_detect_regions(regions, MAX_REGIONS);
+  klog_info("Rilevate %zu regioni di memoria", region_count);
   if (region_count == 0) {
     klog_panic("[mem] Nessuna regione valida rilevata");
   }
@@ -65,8 +64,12 @@ bool memory_find_largest_region(u64 *base, u64 *length) {
   u64 max = 0;
   u64 best_base = 0;
 
+  klog_info("Scanning %zu regioni", region_count);
+
   for (size_t i = 0; i < region_count; i++) {
     memory_region_t *r = &regions[i];
+    klog_debug("Region %zu: base=0x%lx size=%lu type=%d", i, r->base, r->length, r->type);
+
     if (r->type == MEMORY_USABLE && r->length > max) {
       max = r->length;
       best_base = r->base;
@@ -78,9 +81,11 @@ bool memory_find_largest_region(u64 *base, u64 *length) {
       *base = best_base;
     if (length)
       *length = max;
+    klog_info("Largest USABLE region: base=0x%lx length=%lu bytes", best_base, max);
     return true;
   }
 
+  klog_warn("Nessuna regione USABLE trovata");
   return false;
 }
 
