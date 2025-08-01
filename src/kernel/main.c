@@ -3,6 +3,8 @@
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
 #include <klib/klog.h>
+#include <arch/interrupts.h>
+#include <arch/cpu.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
 #include <mm/heap/heap.h>
@@ -87,6 +89,15 @@ void kmain(void) {
   klog_info("Initializing Virtual Memory Manager...");
   vmm_init();
   klog_info("VMM initialized successfully");
+
+  /*
+   * FASE 4: INIZIALIZZAZIONE GESTIONE INTERRUPT
+   */
+  klog_info("Initializing IDT and PIC...");
+  idt_init();
+  pic_remap(0x20, 0x28);
+  cpu_enable_interrupts();
+  klog_info("Interrupts enabled");
 
   /*
    * FASE 5: TEST HEAP COMPLETI
