@@ -2,6 +2,7 @@
 #include <arch/interrupts.h>
 #include <arch/io.h>
 #include <klib/klog.h>
+#include <arch/exceptions.h>
 
 /*
  * ============================================================================
@@ -129,7 +130,9 @@ void irq_register_handler(int irq, irq_handler_t handler) {
 void isr_common_handler(isr_frame_t *frame) {
   u64 int_no = frame->int_no;
 
-  if (int_no >= 32 && int_no <= 47) {
+  if (int_no < 32) {
+    exceptions_handle(frame);
+  } else if (int_no <= 47) {
     int irq = int_no - 32;
 
     if (irq_handlers[irq]) {
@@ -139,7 +142,5 @@ void isr_common_handler(isr_frame_t *frame) {
     }
 
     pic_send_eoi(irq);
-  } else {
-    klog_warn("CPU Exception %lu occurred (not handled)", int_no);
   }
 }
