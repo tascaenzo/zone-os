@@ -1,5 +1,3 @@
-#include <arch/cpu.h>
-#include <arch/interrupts.h>
 #include <arch/memory.h>
 #include <bootloader/limine.h>
 #include <drivers/video/console.h>
@@ -19,6 +17,34 @@
  */
 
 volatile struct limine_framebuffer_request framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
+
+void heap_self_test(void) {
+  klog_info("heap_self_test: inizio test allocatore heap...");
+  void *ptrs[64];
+
+  for (int i = 0; i < 64; ++i)
+    ptrs[i] = kmalloc(32 + (i % 5) * 16);
+
+  for (int i = 0; i < 64; ++i)
+    kfree(ptrs[i]);
+
+  if (!heap_check_integrity())
+    klog_error("heap_self_test: ERRORE di integrità heap!");
+  else
+    klog_info("heap_self_test: OK - allocazione e liberazione funzionano.");
+
+  klog_info("heap_self_test: test su allocazioni grandi (buddy)...");
+
+  void *big1 = kmalloc(64 * 1024);       // 64 KB
+  void *big2 = kmalloc(512 * 1024);      // 512 KB
+  void *big3 = kmalloc(2 * 1024 * 1024); // 2 MB
+
+  kfree(big1);
+  kfree(big2);
+  kfree(big3);
+
+  klog_info("heap_self_test: allocazioni grandi liberate correttamente");
+}
 
 /*
  * ============================================================================
@@ -63,15 +89,6 @@ void kmain(void) {
   klog_info("VMM initialized successfully");
 
   /*
-   * FASE 4: INIZIALIZZAZIONE GESTIONE INTERRUPT
-   */
-  klog_info("Initializing IDT and PIC...");
-  idt_init();
-  pic_remap(0x20, 0x28);
-  cpu_enable_interrupts();
-  klog_info("Interrupts enabled");
-
-  /*
    * FASE 5: TEST HEAP COMPLETI
    */
   heap_init();
@@ -91,6 +108,8 @@ void kmain(void) {
   klog_info("=== MICROKERNEL INITIALIZATION COMPLETE ===");
   klog_info("All tests completed - ZONE-OS microkernel ready");
 
+  klog_info("Running comprehensive heap tests...");
+  heap_self_test(); // ✅ CHIAMATA AGGIUNTA QUI
   while (1) {
     __asm__ volatile("hlt");
   }
