@@ -1,7 +1,7 @@
 #include <klib/klog.h>
 #include <lib/string.h>
-#include <mm/memory.h>
 #include <mm/heap/heap.h>
+#include <mm/memory.h>
 
 // Array temporaneo statico usato prima dell'inizializzazione dello heap
 static memory_region_t temp_regions[ARCH_MAX_MEMORY_REGIONS];
@@ -91,7 +91,7 @@ bool memory_find_largest_region(u64 *base, u64 *length) {
 
   for (size_t i = 0; i < region_count; i++) {
     memory_region_t *r = &regions[i];
-    klog_debug("Region %zu: base=0x%lx size=%lu type=%d", i, r->base, r->length, r->type);
+    // klog_debug("Region %zu: base=0x%lx size=%lu type=%d", i, r->base, r->length, r->type);
 
     if (r->type == MEMORY_USABLE && r->length > max) {
       max = r->length;
