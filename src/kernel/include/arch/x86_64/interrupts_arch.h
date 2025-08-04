@@ -70,4 +70,4 @@ const char *arch_interrupt_exception_name(u8 vector);
  * @param vector Numero vettore (0–255)
  * @param ctx    Stato CPU salvato
  */
-void arch_interrupts_dispatch(u8 vector, arch_interrupt_context_t *ctx);
+arch_interrupt_context_t *arch_interrupts_dispatch(u8 vector, arch_interrupt_context_t *ctx);

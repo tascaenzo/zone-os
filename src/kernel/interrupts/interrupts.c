@@ -1,7 +1,7 @@
 #include <arch/cpu.h>
 #include <arch/interrupt_context.h>
 #include <arch/interrupts_arch.h>
-#include <interrupts.h>
+#include <interrupts/interrupts.h>
 
 /**
  * @file kernel/interrupts.c

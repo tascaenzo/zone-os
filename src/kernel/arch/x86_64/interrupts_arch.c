@@ -42,12 +42,16 @@ extern void *isr_stub_table[];
 
 static void idt_set_gate(int vector, void *isr) {
   u64 addr = (u64)isr;
+  u64 cs_val;
+
+  // Usa il segmento codice corrente (dinamico, invece di costante 0x08)
+  __asm__ volatile("mov %%cs, %0" : "=r"(cs_val));
+  cs_val = (u16)cs_val; // Cast to 16-bit for IDT entry
 
   struct idt_entry *entry = &idt[vector];
-
   entry->offset_low = addr & 0xFFFF;
-  entry->selector = 0x08;  // Segmento codice del kernel (GDT)
-  entry->ist = 0;          // Nessun cambio di stack (IST = 0)
+  entry->selector = cs_val;
+  entry->ist = 0;
   entry->type_attr = 0x8E; // Interrupt gate, present, ring 0
   entry->offset_mid = (addr >> 16) & 0xFFFF;
   entry->offset_high = (addr >> 32) & 0xFFFFFFFF;
@@ -64,10 +68,6 @@ void arch_interrupts_init(void) {
 
   for (int vec = 0; vec < IDT_ENTRIES; vec++) {
     idt_set_gate(vec, isr_stub_table[vec]);
-  }
-
-  for (int i = 0; i < 5; ++i) {
-    klog_warn("isr_stub[%d] = %p", i, isr_stub_table[i]);
   }
 
   struct idt_ptr idtp = {
@@ -88,7 +88,6 @@ int arch_interrupts_register_handler(u8 vector, arch_interrupt_handler_t handler
     return -1;
 
   handlers[vector] = handler;
-  klog_warn("Handler registrato per vettore %u (handler=%p)", vector, handler); // 👈 AGGIUNGI QUI
   return 0;
 }
 
@@ -101,7 +100,7 @@ int arch_interrupts_unregister_handler(u8 vector) {
 // Dispatcher chiamato da stub ASM
 // -----------------------------
 
-void arch_interrupts_dispatch(u8 vector, arch_interrupt_context_t *ctx) {
+arch_interrupt_context_t *arch_interrupts_dispatch(u8 vector, arch_interrupt_context_t *ctx) {
   klog_debug("DISPATCH vector=%u RIP=%p", vector, ctx->rip);
 
   if (handlers[vector]) {
@@ -111,6 +110,8 @@ void arch_interrupts_dispatch(u8 vector, arch_interrupt_context_t *ctx) {
     while (1)
       asm volatile("hlt");
   }
+
+  return ctx; // Restituisce il contesto modificato (se necessario)
 }
 
 // -----------------------------

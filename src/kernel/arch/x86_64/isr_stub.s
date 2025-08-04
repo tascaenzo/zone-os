@@ -1,10 +1,14 @@
 [BITS 64]
 
-[EXTERN arch_interrupts_dispatch]        ; funzione C da chiamare
-[GLOBAL isr_stub_table]                  ; tabella globale per IDT setup
+[EXTERN arch_interrupts_dispatch]
+[GLOBAL isr_stub_table]
 [GLOBAL _isr_common_stub]
 
 section .text
+
+; ----------------------------------------
+; Macros per salvare e ripristinare i registri
+; ----------------------------------------
 
 %macro pusha64 0
     push rax
@@ -43,7 +47,7 @@ section .text
 %endmacro
 
 ; ----------------------------------------
-; Tabella globale degli ISR
+; Tabella globale degli stub ISR
 ; ----------------------------------------
 
 isr_stub_table:
@@ -54,21 +58,21 @@ isr_stub_table:
 %endrep
 
 ; ----------------------------------------
-; Macros ISR
+; Macros ISR per vettori con/senza error code
 ; ----------------------------------------
 
 %macro ISR_NOERR 1
 [GLOBAL isr_stub_%1]
 isr_stub_%1:
-    push 0                  ; Fake error code
-    push %1                 ; Interrupt vector
+    push 0                  ; Inserisce un finto error code
+    push %1                 ; Inserisce il numero del vettore
     jmp _isr_common_stub
 %endmacro
 
 %macro ISR_ERR 1
 [GLOBAL isr_stub_%1]
 isr_stub_%1:
-    push %1                 ; Interrupt vector (error code è già sullo stack)
+    push %1                 ; Inserisce il numero del vettore
     jmp _isr_common_stub
 %endmacro
 
@@ -110,7 +114,7 @@ ISR_NOERR 30
 ISR_NOERR 31
 
 ; ----------------------------------------
-; ISR 32–47 (PIC / timer / keyboard ecc)
+; ISR 32–47 (PIC IRQs, timer, keyboard, etc.)
 ; ----------------------------------------
 
 %assign i 32
@@ -120,19 +124,20 @@ ISR_NOERR 31
 %endrep
 
 ; ----------------------------------------
-; Common dispatcher
+; Common interrupt handler dispatcher
 ; ----------------------------------------
 
 _isr_common_stub:
-    cld
-    pusha64
+    cld                         ; Pulisce il direction flag
+    pusha64                     ; Salva tutti i registri generali
 
-    mov rsi, rsp               ; ctx
-mov rdi, [rsp + 120]       ; vector number
-    call arch_interrupts_dispatch  ; ritorna eventualmente nuovo SP in RAX
-    mov rsp, rax                   ; aggiorna lo stack pointer
+    mov rsi, rsp                ; rsi = ctx (puntatore alla struttura salvata)
+    mov rdi, [rsp + 120]        ; rdi = vector number (sopra l'error code)
+
+    call arch_interrupts_dispatch
+    mov rsp, rax                ; Se arch_dispatch restituisce uno stack modificato
 
     popa64
-    add rsp, 16                    ; pop vector + error code
+    add rsp, 16                 ; Ripristina stack (pop vector + error code)
 
-    iretq
+    iretq                       ; Ritorna dall'interrupt
