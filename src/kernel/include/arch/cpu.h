@@ -132,3 +132,10 @@ const char *cpu_get_vendor(void);
  * @brief CPUID wrapper con leaf e puntatori output
  */
 void cpu_cpuid(u32 leaf, u32 subleaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx);
+
+/**
+ * @brief Legge il registro CR2 (indirizzo faultato in Page Fault)
+ *
+ * @return Indirizzo che ha causato l'ultimo page fault
+ */
+u64 cpu_read_cr2(void);

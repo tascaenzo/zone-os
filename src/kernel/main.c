@@ -1,7 +1,10 @@
+#include <arch/cpu.h>
 #include <arch/memory.h>
 #include <bootloader/limine.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
+#include <interrupts/exceptions.h>
+#include <interrupts/interrupts.h>
 #include <klib/klog.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
@@ -10,127 +13,66 @@
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 
-/*
- * ============================================================================
- * BOOTLOADER REQUESTS
- * ============================================================================
- */
-
+// Richiesta framebuffer (LIMINE)
 volatile struct limine_framebuffer_request framebuffer_request = {.id = LIMINE_FRAMEBUFFER_REQUEST, .revision = 0};
 
-void heap_self_test(void) {
-  klog_info("heap_self_test: inizio test allocatore heap...");
-  void *ptrs[64];
-
-  for (int i = 0; i < 64; ++i)
-    ptrs[i] = kmalloc(32 + (i % 5) * 16);
-
-  for (int i = 0; i < 64; ++i)
-    kfree(ptrs[i]);
-
-  if (!heap_check_integrity())
-    klog_error("heap_self_test: ERRORE di integrità heap!");
-  else
-    klog_info("heap_self_test: OK - allocazione e liberazione funzionano.");
-
-  klog_info("heap_self_test: test su allocazioni grandi (buddy)...");
-
-  void *big1 = kmalloc(64 * 1024);       // 64 KB
-  void *big2 = kmalloc(512 * 1024);      // 512 KB
-  void *big3 = kmalloc(2 * 1024 * 1024); // 2 MB
-
-  kfree(big1);
-  kfree(big2);
-  kfree(big3);
-
-  klog_info("heap_self_test: allocazioni grandi liberate correttamente");
-}
-
-/*
- * ============================================================================
- * MICROKERNEL ENTRY POINT
- * ============================================================================
- */
-
 void kmain(void) {
-  /*
-   * FASE 1: INIZIALIZZAZIONE VIDEO E CONSOLE
-   */
+  // 1. Inizializzazione video
   struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
   framebuffer_init(fb->address, fb->width, fb->height, fb->pitch, fb->bpp);
   console_init();
   console_clear();
 
   klog_info("=== ZONE-OS MICROKERNEL ===");
-  klog_info("Architecture: %s", arch_get_name());
-  klog_info("Microkernel initializing...");
+  klog_info("Booted via Limine, architecture: %s", arch_get_name());
 
-  /*
-   * FASE 2: INIZIALIZZAZIONE PHYSICAL MEMORY MANAGER
-   */
-  klog_info("Initializing Physical Memory Manager...");
+  // 2. Init memoria fisica (PMM)
   memory_init();
-  pmm_result_t pmm_result = pmm_init();
-  if (pmm_result != PMM_SUCCESS) {
-    klog_panic("PMM init failed (code: %d)", pmm_result);
-  }
+  if (pmm_init() != PMM_SUCCESS)
+    klog_panic("PMM init failed");
 
-  const pmm_stats_t *pmm_stats = pmm_get_stats();
-  if (pmm_stats) {
-    u64 free_mb = pmm_stats->free_pages * PAGE_SIZE / (1024 * 1024);
-    klog_info("PMM initialized - Memory available: %lu MB", free_mb);
-  }
+  const pmm_stats_t *pmm = pmm_get_stats();
+  klog_info("PMM: %lu MB free", pmm->free_pages * PAGE_SIZE / (1024 * 1024));
 
-  /*
-   * FASE 3: INIZIALIZZAZIONE VIRTUAL MEMORY MANAGER
-   */
-  klog_info("Initializing Virtual Memory Manager...");
+  // 3. Init memoria virtuale (VMM)
   vmm_init();
-  klog_info("VMM initialized successfully");
+  klog_info("VMM initialized");
 
-  /*
-   * FASE 5: TEST HEAP COMPLETI
-   */
+  // 4. Init IDT + gestori interrupt
+  interrupts_init();
+  exceptions_init();
+  klog_info("IDT and CPU exception handlers initialized");
+
+  // 5. Verifica RFLAGS.IF prima/dopo STI
+  u64 flags;
+  asm volatile("pushfq; popq %0" : "=r"(flags));
+  klog_info("Before sti: IF=%d", (flags >> 9) & 1);
+  interrupts_enable();
+  asm volatile("pushfq; popq %0" : "=r"(flags));
+  klog_info("After sti: IF=%d", (flags >> 9) & 1);
+
+  // 6. Trigger INT3 per test gestore breakpoint
+
+  // 7. Init heap e late memory
   heap_init();
   memory_late_init();
 
-  /*
-   * FASE 6: STATISTICHE FINALI
-   */
-  const pmm_stats_t *final_stats = pmm_get_stats();
-  if (final_stats) {
-    klog_info("Final memory stats: %lu MB free, %lu MB used", final_stats->free_pages * PAGE_SIZE / (1024 * 1024), final_stats->used_pages * PAGE_SIZE / (1024 * 1024));
-  }
+  // 8. Statistiche finali memoria
+  const pmm_stats_t *final = pmm_get_stats();
+  klog_info("Memory: %lu MB free, %lu MB used", final->free_pages * PAGE_SIZE / (1024 * 1024), final->used_pages * PAGE_SIZE / (1024 * 1024));
 
-  /*
-   * FASE 7: MICROKERNEL READY
-   */
-  klog_info("=== MICROKERNEL INITIALIZATION COMPLETE ===");
-  klog_info("All tests completed - ZONE-OS microkernel ready");
+  // 9. Idle loop
+  klog_info("ZONE-OS READY — entering idle");
 
-  klog_info("Running comprehensive heap tests...");
-  heap_self_test(); // ✅ CHIAMATA AGGIUNTA QUI
-  while (1) {
-    __asm__ volatile("hlt");
-  }
+  klog_info("Trigger INT3...");
+  asm volatile("int3");
+  klog_info("Returned from INT3");
+
+  int zero = 0;
+  int one = 1;
+  klog_info("Zero division test: %d / %d = %d", one, zero, one / zero); // Questo causerà un errore di divisione per zero
+  klog_info("Zero division test returned successfully, this is unexpected");
+
+  while (1)
+    asm volatile("hlt");
 }
-
-/*
- * ============================================================================
- * MICROKERNEL
- * ============================================================================
- *
- * MICROKERNEL (ZONE-OS):
- * ┌─────────────────────────────────────────────────────────────┐
- * │                    USER SPACE                               │
- * ├─────────────┬─────────────┬───────────────┬─────────────────┤
- * │File System  │Device Mgr   │Network Stack  │Application      │
- * │Server       │Server       │Server         │Processes        │
- * └─────────────┴─────────────┴───────────────┴─────────────────┘
- *               ↕ IPC Messages ↕
- * ┌─────────────────────────────────────────────────────────────┐
- * │                MICROKERNEL                                  │
- * │  PMM + VMM + HEAP + IPC + Minimal Scheduler + System Calls  │
- * └─────────────────────────────────────────────────────────────┘
- *
- */

@@ -174,6 +174,10 @@ static const char *memory_type_name(memory_type_t type) {
   }
 }
 
+void log_memory_type(memory_type_t type) {
+  klog_debug("Memory type: %s", memory_type_name(type));
+}
+
 // Controllo sovrapposizione intervalli
 static bool ranges_overlap(u64 a_start, u64 a_end, u64 b_start, u64 b_end) {
   return !(a_end < b_start || b_end < a_start);

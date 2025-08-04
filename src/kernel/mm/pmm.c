@@ -482,7 +482,7 @@ pmm_result_t pmm_init(void) {
       for (u64 page = start_page; page <= end_page; page++) {
         pmm_mark_page_free(page);
       }
-      klog_debug("PMM: Liberate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
+      // klog_debug("PMM: Liberate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
       break;
 
     default:
@@ -492,7 +492,7 @@ pmm_result_t pmm_init(void) {
        * → Lascia occupate (già fatto da memset)
        */
       pmm_stats.reserved_pages += (end_page - start_page + 1);
-      klog_debug("PMM: Riservate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
+      // klog_debug("PMM: Riservate %lu pagine (regione %zu tipo %d)", end_page - start_page + 1, i, region->type);
       break;
     }
   }
