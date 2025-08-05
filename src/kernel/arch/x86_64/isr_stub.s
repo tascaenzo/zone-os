@@ -8,42 +8,44 @@ section .text
 
 ; ----------------------------------------
 ; Macros per salvare e ripristinare i registri
+; L'ordine è inverso rispetto alla struttura C
+; (push r15 → rax) per ottenere in memoria rax...r15
 ; ----------------------------------------
 
-%macro pusha64 0
-    push rax
-    push rbx
-    push rcx
-    push rdx
-    push rbp
+%macro save_context 0
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push r10
+    push r9
+    push r8
     push rdi
     push rsi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
+    push rbp
+    push rdx
+    push rcx
+    push rbx
+    push rax
 %endmacro
 
-%macro popa64 0
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
+%macro restore_context 0
+    pop rax
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rbp
     pop rsi
     pop rdi
-    pop rbp
-    pop rdx
-    pop rcx
-    pop rbx
-    pop rax
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
 %endmacro
 
 ; ----------------------------------------
@@ -52,7 +54,7 @@ section .text
 
 isr_stub_table:
 %assign i 0
-%rep 48
+%rep 256
     dq isr_stub_%+i
 %assign i i+1
 %endrep
@@ -114,11 +116,11 @@ ISR_NOERR 30
 ISR_NOERR 31
 
 ; ----------------------------------------
-; ISR 32–47 (PIC IRQs, timer, keyboard, etc.)
+; ISR 32–255 (tutti gli altri vettori: IRQ/PIC, APIC, software, ecc.)
 ; ----------------------------------------
 
 %assign i 32
-%rep 16
+%rep (256-32)
     ISR_NOERR i
 %assign i i+1
 %endrep
@@ -129,15 +131,15 @@ ISR_NOERR 31
 
 _isr_common_stub:
     cld                         ; Pulisce il direction flag
-    pusha64                     ; Salva tutti i registri generali
+    save_context                ; Salva tutti i registri generali
 
-    mov rsi, rsp                ; rsi = ctx (puntatore alla struttura salvata)
     mov rdi, [rsp + 120]        ; rdi = vector number (sopra l'error code)
+    mov rsi, rsp                ; rsi = ctx (puntatore alla struttura salvata)
 
     call arch_interrupts_dispatch
     mov rsp, rax                ; Se arch_dispatch restituisce uno stack modificato
 
-    popa64
+    restore_context
     add rsp, 16                 ; Ripristina stack (pop vector + error code)
 
     iretq                       ; Ritorna dall'interrupt
