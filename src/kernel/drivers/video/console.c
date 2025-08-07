@@ -44,7 +44,7 @@ static void draw_char(uint64_t x, uint64_t y, char c) {
   uint64_t screen_y = BORDER_TOP + y;
 
   // Pulisce l'area del carattere (include spaziatura)
-  framebuffer_fill_rect(screen_x, screen_y, FONT_WIDTH, FONT_HEIGHT, bg_color);
+  framebuffer_fill_rect(screen_x, screen_y, CHAR_WIDTH, CHAR_HEIGHT, bg_color);
 
   // Disegna il carattere scalato
   for (uint8_t row = 0; row < FONT_BASE_HEIGHT; ++row) {
@@ -120,8 +120,8 @@ static void console_scroll() {
   // ========================================================================
 
   uint64_t text_start_y = BORDER_TOP;
-  uint64_t text_width_bytes = cols * FONT_WIDTH * bytes_per_pixel;
-  uint64_t text_area_height = (rows - 1) * FONT_HEIGHT;
+  uint64_t text_width_bytes = cols * CHAR_WIDTH * bytes_per_pixel;
+  uint64_t text_area_height = (rows - 1) * CHAR_HEIGHT;
 
   // Validazione text_width_bytes contro overflow - SILENT FAIL
   if (cols > UINT64_MAX / CHAR_WIDTH || (cols * CHAR_WIDTH) > UINT64_MAX / bytes_per_pixel) {
