@@ -1,6 +1,6 @@
+#include "klog.h"
 #include <drivers/video/console.h>
-#include <klib/klog.h>
-#include <lib/stdio.h>
+#include <lib/stdio/stdio.h>
 
 // === Stato interno del sistema di logging ===
 

@@ -1,12 +1,11 @@
-#include <arch/cpu.h>
-#include <arch/memory.h>
-#include <arch/x86_64/gdt.h> // Inizializzazione segmenti Ring 0/3 + TSS
-#include <bootloader/limine.h>
+#include <arch/x86_64/gdt/gdt.h>
+#include <arch/x86_64/memory/memory.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
-#include <klib/klog.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
+#include <klib/klog/klog.h>
+#include <lib/stdio/stdio.h>
+#include <lib/string/string.h>
+#include <limine.h>
 #include <mm/heap/heap.h>
 #include <mm/memory.h>
 #include <mm/pmm.h>

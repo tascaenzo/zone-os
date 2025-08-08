@@ -1,4 +1,4 @@
-#include <lib/math.h>
+#include "math.h"
 
 /**
  * @file lib/math.c

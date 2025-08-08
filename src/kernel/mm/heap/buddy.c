@@ -1,9 +1,9 @@
-#include <klib/bitmap.h>
-#include <klib/klog.h>
-#include <klib/list.h>
-#include <lib/math.h>
-#include <lib/string.h>
-#include <mm/heap/buddy.h>
+#include "buddy.h"
+#include <klib/bitmap/bitmap.h>
+#include <klib/klog/klog.h>
+#include <klib/list/list.h>
+#include <lib/math/math.h>
+#include <lib/string/string.h>
 
 /*
  * Implementazione "didattica" di un allocatore Buddy.

@@ -1,6 +1,6 @@
-#include <arch/x86_64/gdt.h>
-#include <klib/klog.h>
-#include <lib/string.h>
+#include "gdt.h"
+#include <klib/klog/klog.h>
+#include <lib/string/string.h>
 
 extern void _load_gdt_and_tss_asm(struct GDT_Pointer *ptr);
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <klib/bitmap.h>
-#include <klib/list.h>
+#include <klib/bitmap/bitmap.h>
+#include <klib/list/list.h>
 #include <klib/spinlock.h>
 #include <lib/stdbool.h>
 #include <lib/types.h>

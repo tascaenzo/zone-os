@@ -33,7 +33,7 @@
 
 // Inclusione automatica delle definizioni di paging arch-specifiche
 #if defined(__x86_64__) || defined(_M_X64)
-#include <arch/x86_64/paging_defs.h>
+#include "paging_defs.h"
 #elif defined(__aarch64__) || defined(_M_ARM64)
 #include <arch/arm64/paging_defs.h>
 #elif defined(__riscv) && (__riscv_xlen == 64)

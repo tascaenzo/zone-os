@@ -1,7 +1,7 @@
-#include <arch/memory.h>
-#include <klib/klog.h>
+#include <arch/x86_64/memory/memory.h>
+#include <klib/klog/klog.h>
 #include <klib/spinlock.h>
-#include <lib/string.h>
+#include <lib/string/string.h>
 #include <lib/types.h>
 #include <mm/memory.h>
 #include <mm/pmm.h>

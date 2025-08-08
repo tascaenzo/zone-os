@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arch/memory.h> // Per PAGE_SIZE, IS_PAGE_ALIGNED, etc.
+#include "paging_defs.h"
 #include <lib/types.h>
 
 /**
@@ -94,10 +94,8 @@
 #define VMM_X86_64_DIRECT_MAP 0xFFFF888000000000UL  // Physical memory direct map
 
 // Helpers per conversione indirizzi fisici ↔ virtuali nel direct map
-#define VMM_X86_64_PHYS_TO_VIRT(addr)                                             \
-  ((void *)((u64)(addr) + VMM_X86_64_DIRECT_MAP))
-#define VMM_X86_64_VIRT_TO_PHYS(addr)                                             \
-  ((u64)(addr) - VMM_X86_64_DIRECT_MAP)
+#define VMM_X86_64_PHYS_TO_VIRT(addr) ((void *)((u64)(addr) + VMM_X86_64_DIRECT_MAP))
+#define VMM_X86_64_VIRT_TO_PHYS(addr) ((u64)(addr) - VMM_X86_64_DIRECT_MAP)
 
 // User space layout
 #define VMM_X86_64_USER_BASE 0x0000000000400000UL  // 4MB (user start)

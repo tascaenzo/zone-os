@@ -1,7 +1,7 @@
-#include <klib/klog.h>
-#include <lib/string.h>
+#include "memory.h"
+#include <klib/klog/klog.h>
+#include <lib/string/string.h>
 #include <mm/heap/heap.h>
-#include <mm/memory.h>
 
 // Array temporaneo statico usato prima dell'inizializzazione dello heap
 static memory_region_t temp_regions[ARCH_MAX_MEMORY_REGIONS];

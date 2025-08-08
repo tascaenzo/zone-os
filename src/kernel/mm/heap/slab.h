@@ -1,6 +1,6 @@
 #pragma once
 
-#include <klib/list.h>
+#include <klib/list/list.h>
 #include <klib/spinlock.h>
 #include <lib/types.h>
 

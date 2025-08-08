@@ -1,9 +1,10 @@
-#include <arch/cpu.h>
-#include <arch/memory.h>
-#include <bootloader/limine.h>
-#include <klib/klog.h>
-#include <lib/string.h>
+#include "memory.h"
+#include "vmm_defs.h"
+#include <arch/x86_64/cpu/cpu.h>
+#include <klib/klog/klog.h>
+#include <lib/string/string.h>
 #include <lib/types.h>
+#include <limine.h>
 
 /**
  * @file arch/x86_64/memory.c

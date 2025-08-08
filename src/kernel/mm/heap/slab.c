@@ -1,10 +1,9 @@
-// slab.c
-#include <klib/klog.h>
-#include <klib/list.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
-#include <mm/heap/heap.h>
-#include <mm/heap/slab.h>
+#include "slab.h"
+#include "heap.h"
+#include <klib/klog/klog.h>
+#include <klib/list/list.h>
+#include <lib/stdio/stdio.h>
+#include <lib/string/string.h>
 #include <mm/pmm.h>
 
 #define list_first_entry(head, type, member) LIST_ENTRY((head)->next, type, member)

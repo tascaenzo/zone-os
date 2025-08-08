@@ -2,9 +2,9 @@
 // #include <arch/interrupt_context.h>
 // #include <drivers/video/console.h>
 // #include <interrupts/interrupts.h>
-// #include <klib/klog.h>
+// #include <klib/klog/klog.h>
 // #include <lib/stdarg.h>
-// #include <lib/stdio.h>
+// #include <lib/stdio/stdio.h>
 //
 // #define PANIC_FG_COLOR CONSOLE_COLOR_WHITE
 // #define PANIC_BG_COLOR CONSOLE_COLOR_BLACK

@@ -5,8 +5,8 @@
  * Gestione di bitmap generiche con operazioni bitwise efficienti.
  */
 
-#include <klib/bitmap.h>
-#include <lib/string.h>
+#include "bitmap.h"
+#include <lib/string/string.h>
 
 #define BITMAP_WORD_BITS 64
 #define BITMAP_WORD_INDEX(i) ((i) / BITMAP_WORD_BITS)

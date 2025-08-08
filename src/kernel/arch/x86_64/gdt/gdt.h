@@ -31,7 +31,7 @@ struct TSS {
 } __attribute__((packed));
 
 // GDT completa allineata a 4096 byte
-__attribute__((aligned(4096))) struct GDT {
+struct __attribute__((aligned(4096))) GDT {
   struct GDT_Descriptor null;        // 0x00
   struct GDT_Descriptor kernel_code; // 0x08
   struct GDT_Descriptor kernel_data; // 0x10

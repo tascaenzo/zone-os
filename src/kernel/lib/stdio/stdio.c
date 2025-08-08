@@ -1,6 +1,7 @@
+#include "stdio.h"
 #include <drivers/video/console.h>
 #include <lib/stdarg.h>
-#include <lib/string.h>
+#include <lib/string/string.h>
 #include <lib/types.h>
 
 static int print_number(char *buf, uint64_t num, int base, int is_signed, int uppercase) {

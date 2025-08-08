@@ -1,6 +1,6 @@
-#include <arch/cpu.h>
-#include <klib/klog.h>
-#include <lib/string.h>
+#include "cpu.h"
+#include <klib/klog/klog.h>
+#include <lib/string/string.h>
 
 void cpu_cpuid(u32 leaf, u32 subleaf, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx) {
   __asm__ volatile("cpuid" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "a"(leaf), "c"(subleaf));

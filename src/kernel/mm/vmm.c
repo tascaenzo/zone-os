@@ -1,6 +1,6 @@
-#include <klib/klog.h>
+#include <klib/klog/klog.h>
 #include <klib/spinlock.h>
-#include <lib/string.h>
+#include <lib/string/string.h>
 #include <lib/types.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>

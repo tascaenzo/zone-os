@@ -1,6 +1,6 @@
+#include "string.h"
 #include <lib/stddef.h>
 #include <lib/stdint.h>
-#include <lib/string.h>
 
 /**
  * @brief Copia n byte dalla sorgente alla destinazione (non gestisce overlap).

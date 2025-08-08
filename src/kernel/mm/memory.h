@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arch/memory.h>
+#include <arch/x86_64/memory/memory.h>
 
 /*
  *

@@ -1,6 +1,6 @@
 // #include <arch/cpu.h>
 // #include <arch/interrupt_context.h>
-// #include <klib/klog.h>
+// #include <klib/klog/klog.h>
 // #include <lib/types.h>
 // #include <mm/pmm.h>
 // #include <mm/vmm.h>

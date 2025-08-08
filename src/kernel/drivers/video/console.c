@@ -1,8 +1,8 @@
 #include <drivers/video/console.h>
-#include <drivers/video/font8x16.h>
+#include <drivers/video/fonts/font8x16.h>
 #include <drivers/video/framebuffer.h>
 #include <lib/stdint.h>
-#include <lib/string.h>
+#include <lib/string/string.h>
 
 // === Costanti per configurazione del font e layout ===
 #define FONT_SCALE 1
