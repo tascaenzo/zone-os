@@ -8,6 +8,7 @@
 #include <lib/stdio/stdio.h>
 #include <lib/string/string.h>
 #include <mm/memory.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 
@@ -24,8 +25,8 @@ void heap_init(void) {
     return;
   }
 
-  base = PAGE_ALIGN_UP(base);
-  size = PAGE_ALIGN_DOWN(size);
+  base = mm_page_align_up(base);
+  size = mm_page_align_down(size);
 
   if (!buddy_init(&buddy, base, size, buddy_bitmap, sizeof(buddy_bitmap) * 8)) {
     klog_panic("heap: inizializzazione buddy fallita");

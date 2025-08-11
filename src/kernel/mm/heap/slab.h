@@ -1,7 +1,7 @@
 #pragma once
 
 #include <klib/list/list.h>
-#include <klib/spinlock.h>
+#include <klib/spinlock/spinlock.h>
 #include <lib/types.h>
 
 /**

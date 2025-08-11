@@ -4,6 +4,7 @@
 #include <klib/list/list.h>
 #include <lib/stdio/stdio.h>
 #include <lib/string/string.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 
 #define list_first_entry(head, type, member) LIST_ENTRY((head)->next, type, member)
@@ -62,7 +63,7 @@ slab_cache_t *slab_find_cache_for_ptr(void *ptr) {
       LIST_FOR_EACH(it, lists[l]) {
         slab_t *slab = LIST_ENTRY(it, slab_t, node);
         u8 *base = (u8 *)slab->page_addr;
-        u8 *end = base + PAGE_SIZE;
+        u8 *end = base + arch_memory_page_size();
         if ((u8 *)ptr >= base && (u8 *)ptr < end) {
           spinlock_unlock(&cache->lock);
           return cache;
@@ -153,7 +154,7 @@ void slab_cache_free(slab_cache_t *cache, void *ptr) {
 
   spinlock_lock(&cache->lock);
 
-  slab_t *slab = (slab_t *)PAGE_ALIGN_DOWN((u64)ptr);
+  slab_t *slab = (slab_t *)mm_page_align_down((u64)ptr);
   if (slab->magic != SLAB_MAGIC_ALLOC) {
     spinlock_unlock(&cache->lock);
     return;
