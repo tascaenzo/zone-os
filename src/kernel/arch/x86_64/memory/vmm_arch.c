@@ -1,6 +1,6 @@
 #include "memory.h"
 #include "vmm_defs.h"
-#include <arch/x86_64/cpu/cpu.h>
+#include <arch/x86_64/cpu/cpu_lowlevel.h>
 #include <klib/klog/klog.h>
 #include <lib/string/string.h>
 #include <lib/types.h>
@@ -97,7 +97,7 @@ static struct {
  */
 void vmm_x86_64_enable_nx(void) {
   // Verifica se la CPU supporta il bit NX (CPUID bit 20 in EDX @ 0x80000001)
-  if (!cpu_supports_nx()) {
+  if (!cpu_has_nx()) {
     klog_warn("x86_64_vmm: NX non supportato dalla CPU. Proseguo senza NXE.");
     return;
   }

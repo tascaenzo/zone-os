@@ -44,7 +44,6 @@ extern void arch_vmm_switch_space(vmm_space_t *space);
 extern bool arch_vmm_map_pages(vmm_space_t *space, u64 virt_addr, u64 phys_addr, size_t page_count, u64 flags);
 extern void arch_vmm_unmap_pages(vmm_space_t *space, u64 virt_addr, size_t page_count);
 extern bool arch_vmm_resolve(vmm_space_t *space, u64 virt_addr, u64 *phys_addr);
-extern void arch_vmm_debug_dump(vmm_space_t *space);
 extern bool arch_vmm_check_integrity(vmm_space_t *space);
 extern void *vmm_phys_to_virt(u64 phys_addr);
 extern u64 vmm_virt_to_phys(u64 virt_addr);
@@ -481,15 +480,6 @@ void vmm_debug_dump(vmm_space_t *space) {
 
   // RELEASE LOCK per chiamata arch-specific
   spinlock_unlock(&vmm_lock);
-
-  klog_info("=== VMM DEBUG DUMP ===");
-  klog_info("Spazio: %p", space);
-  klog_info("Kernel space: %s", is_kernel_space ? "Si" : "No");
-
-  // Delega all'implementazione arch-specific (senza lock)
-  arch_vmm_debug_dump(space);
-
-  klog_info("=== END VMM DEBUG ===");
 }
 
 /**

@@ -122,12 +122,6 @@ size_t arch_memory_detect_regions(memory_region_t *regions, size_t max_regions);
 bool arch_memory_region_valid(u64 base, u64 length);
 
 /**
- * @brief Restituisce una stringa identificativa dell'architettura
- * @return Stringa statica (es. "x86_64", "ARM64", etc.)
- */
-const char *arch_get_name(void);
-
-/**
  * @brief Calcola e restituisce le statistiche di memoria fisica
  *
  * Le statistiche vengono calcolate sulla base delle regioni rilevate

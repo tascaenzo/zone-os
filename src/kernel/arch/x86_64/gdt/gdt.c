@@ -1,3 +1,24 @@
+/**
+ * @file gdt.c
+ * @brief Inizializzazione della Global Descriptor Table (GDT) e del Task State Segment (TSS) per x86_64
+ *
+ * Questo modulo prepara e carica la GDT e il TSS in modalità long mode.
+ * - Crea i descrittori per codice e dati a livello kernel e utente.
+ * - Imposta un descrittore TSS a 64 bit per la gestione dello stack in ring0 e IST.
+ * - Utilizza la routine assembly `_load_gdt_and_tss_asm` per caricare il GDTR e il TR.
+ *
+ * La GDT viene costruita in memoria statica e contiene:
+ *  - Segmenti null, codice e dati per ring0 e ring3
+ *  - Eventuali segmenti compat (OVMF)
+ *  - Descrittore TSS a 64 bit (diviso in due entry GDT nel formato attuale)
+ *
+ * @note In modalità long mode la segmentazione è limitata, ma la GDT resta necessaria
+ *       per selettori validi e per il caricamento del TSS usato in gestione interrupt.
+ *
+ * @date 2025
+ * @author Enzo Tasca
+ */
+
 #include "gdt.h"
 #include <klib/klog/klog.h>
 #include <lib/string/string.h>

@@ -1,4 +1,5 @@
-#include <arch/x86_64/gdt/gdt.h>
+#include <arch/platform.h>
+#include <arch/segment.h>
 #include <arch/x86_64/memory/memory.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
@@ -21,12 +22,9 @@ void kmain(void) {
   console_init();
   console_clear();
 
-  // === Inizializzazione GDT + TSS ===
-  // In questo punto carichiamo la GDT con i segmenti per Ring 0 e Ring 3
-  // - Ring 0 (attivo): 0x08 = codice kernel, 0x10 = dati kernel
-  // - Ring 3 (pronto): 0x28 = codice user, 0x20 = dati user
-  // Carichiamo anche il TSS per supporto a IST/interrupt e future syscall
-  gdt_init();
+  arch_init();
+
+  arch_segment_init();
   klog_info("GDT + TSS initialized (Ring 0 attivo, Ring 3 pronto)");
 
   // === Log iniziale ===
@@ -56,10 +54,10 @@ void kmain(void) {
   // === Test interruzione software (INT3) ===
   klog_info("ZONE-OS READY — entering idle");
 
-  klog_info("Trigger INT3...");
-  asm volatile("int3");
-  klog_info("Returned from INT3");
-
+  // klog_info("Trigger INT3...");
+  // asm volatile("int3");
+  // klog_info("Returned from INT3");
+  //
   // === Loop di idle ===
   while (1)
     asm volatile("hlt");

@@ -1,3 +1,26 @@
+/**
+ * @file arch/x86_64/gdt/gdt.h
+ * @brief Strutture dati e API interne per la gestione della GDT e del TSS su x86_64
+ *
+ * Definisce i formati dei descrittori di segmento, del Task State Segment (TSS)
+ * e della Global Descriptor Table (GDT) in modalità long mode.
+ * Fornisce inoltre la dichiarazione della funzione di inizializzazione `gdt_init()`,
+ * usata dal backend x86_64 per preparare la segmentazione di base.
+ *
+ * Strutture principali:
+ * - GDT_Descriptor: descrittore standard da 8 byte (codice/dati/TSS low)
+ * - TSS: struttura del Task State Segment secondo Intel SDM vol. 3, Fig. 7-11
+ * - GDT: tabella completa, allineata a 4096 byte, con entry per kernel, utente e TSS
+ * - GDT_Pointer: struttura usata dall’istruzione `lgdt`
+ *
+ * @note Questo header è interno al backend architetturale e non va incluso dal codice
+ *       generico del kernel. Usare invece l’API pubblica `arch_segment_init()` per
+ *       l’inizializzazione cross-arch.
+ *
+ * @date 2025
+ * @author Enzo Tasca
+ */
+
 #pragma once
 #include <lib/types.h>
 

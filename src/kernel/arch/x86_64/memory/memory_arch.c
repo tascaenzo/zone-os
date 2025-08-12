@@ -1,6 +1,7 @@
 #include "memory.h"
 #include "vmm_defs.h"
-#include <arch/x86_64/cpu/cpu.h>
+#include <arch/platform.h>
+#include <arch/x86_64/cpu/cpu_lowlevel.h>
 #include <klib/klog/klog.h>
 #include <lib/string/string.h>
 #include <lib/types.h>
@@ -439,7 +440,7 @@ void arch_memory_init(void) {
     klog_debug("x86_64: MTRR supportato");
   }
 
-  if (!cpu_supports_nx()) {
+  if (!cpu_has_nx()) {
     klog_warn("x86_64: Bit NX non supportato - protezione esecuzione limitata");
   } else {
     klog_debug("x86_64: Bit NX supportato");
@@ -547,15 +548,6 @@ void arch_memory_get_stats(memory_stats_t *stats) {
 
   // Copia le statistiche cached
   memcpy(stats, &cached_stats, sizeof(memory_stats_t));
-}
-
-/**
- * @brief Ritorna identificativo architettura x86_64
- *
- * @return Stringa costante "x86_64" per identificazione
- */
-const char *arch_get_name(void) {
-  return "x86_64";
 }
 
 /*
