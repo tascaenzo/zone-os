@@ -4,7 +4,7 @@
 #include <mm/heap/heap.h>
 
 // Array temporaneo statico usato prima dell'inizializzazione dello heap
-static memory_region_t temp_regions[ARCH_MAX_MEMORY_REGIONS];
+static memory_region_t temp_regions[KCFG_MAX_MEM_REGIONS];
 
 // Puntatore alle regioni attualmente in uso
 memory_region_t *regions = temp_regions;
@@ -27,7 +27,7 @@ void memory_init(void) {
 
   arch_memory_init();
 
-  region_count = arch_memory_detect_regions(temp_regions, ARCH_MAX_MEMORY_REGIONS);
+  region_count = arch_memory_detect_regions(temp_regions, KCFG_MAX_MEM_REGIONS);
   regions = temp_regions;
   klog_info("Rilevate %zu regioni di memoria", region_count);
   if (region_count == 0) {

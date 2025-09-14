@@ -1,9 +1,11 @@
 #include "slab.h"
 #include "heap.h"
+#include <arch/x86_64/memory/vmm_defs.h>
 #include <klib/klog/klog.h>
 #include <klib/list/list.h>
 #include <lib/stdio/stdio.h>
 #include <lib/string/string.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 
 #define list_first_entry(head, type, member) LIST_ENTRY((head)->next, type, member)
@@ -62,7 +64,7 @@ slab_cache_t *slab_find_cache_for_ptr(void *ptr) {
       LIST_FOR_EACH(it, lists[l]) {
         slab_t *slab = LIST_ENTRY(it, slab_t, node);
         u8 *base = (u8 *)slab->page_addr;
-        u8 *end = base + PAGE_SIZE;
+        u8 *end = base + arch_page_size();
         if ((u8 *)ptr >= base && (u8 *)ptr < end) {
           spinlock_unlock(&cache->lock);
           return cache;

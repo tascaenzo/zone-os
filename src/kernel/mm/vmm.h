@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arch/x86_64/memory/memory.h>
+#include <arch/memory.h>
 #include <lib/types.h>
 
 /* -------------------------------------------------------------------------- */
@@ -71,24 +71,6 @@
  * - Il kernel usa pagine huge (2M) ove possibile per performance
  *
  */
-
-/*
- * ============================================================================
- * TYPES
- * ============================================================================
- */
-
-/**
- * @brief Flag per mappature virtuali
- */
-typedef enum {
-  VMM_FLAG_READ = (1 << 0),
-  VMM_FLAG_WRITE = (1 << 1),
-  VMM_FLAG_EXEC = (1 << 2),
-  VMM_FLAG_USER = (1 << 3),
-  VMM_FLAG_GLOBAL = (1 << 4),
-  VMM_FLAG_NO_CACHE = (1 << 5),
-} vmm_flags_t;
 
 /**
  * @brief Tipo astratto per uno spazio di indirizzamento

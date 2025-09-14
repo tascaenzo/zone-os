@@ -1,6 +1,7 @@
+#include <arch/memory.h>
 #include <arch/platform.h>
 #include <arch/segment.h>
-#include <arch/x86_64/memory/memory.h>
+#include <arch/x86_64/memory/vmm_defs.h>
 #include <drivers/video/console.h>
 #include <drivers/video/framebuffer.h>
 #include <klib/klog/klog.h>
@@ -37,7 +38,7 @@ void kmain(void) {
     klog_panic("PMM init failed");
 
   const pmm_stats_t *pmm = pmm_get_stats();
-  klog_info("PMM: %lu MB free", pmm->free_pages * PAGE_SIZE / (1024 * 1024));
+  klog_info("PMM: %lu MB free", pmm->free_pages * arch_page_size() / (1024 * 1024));
 
   // === Inizializzazione memoria virtuale (VMM) ===
   vmm_init();
@@ -49,7 +50,7 @@ void kmain(void) {
 
   // === Statistiche finali memoria ===
   const pmm_stats_t *final = pmm_get_stats();
-  klog_info("Memory: %lu MB free, %lu MB used", final->free_pages * PAGE_SIZE / (1024 * 1024), final->used_pages * PAGE_SIZE / (1024 * 1024));
+  klog_info("Memory: %lu MB free, %lu MB used", final->free_pages * arch_page_size() / (1024 * 1024), final->used_pages * arch_page_size() / (1024 * 1024));
 
   // === Test interruzione software (INT3) ===
   klog_info("ZONE-OS READY — entering idle");

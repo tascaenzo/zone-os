@@ -1,9 +1,11 @@
-#include <arch/x86_64/memory/memory.h>
+#include <arch/memory.h>
+#include <arch/x86_64/memory/vmm_defs.h>
 #include <klib/klog/klog.h>
 #include <klib/spinlock.h>
 #include <lib/string/string.h>
 #include <lib/types.h>
 #include <mm/memory.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 
 /*
@@ -332,8 +334,8 @@ pmm_result_t pmm_init(void) {
    * Chiediamo al layer architetturale: "Dimmi che memoria abbiamo!"
    * Risposta: array di regioni con tipo, base, e dimensione.
    */
-  memory_region_t regions[ARCH_MAX_MEMORY_REGIONS];
-  size_t region_count = arch_memory_detect_regions(regions, ARCH_MAX_MEMORY_REGIONS);
+  memory_region_t regions[KCFG_MAX_MEM_REGIONS];
+  size_t region_count = arch_memory_detect_regions(regions, KCFG_MAX_MEM_REGIONS);
 
   if (region_count == 0) {
     klog_error("PMM: Il layer architetturale non ha trovato memoria!");
@@ -399,7 +401,7 @@ pmm_result_t pmm_init(void) {
    * 32KB → PAGE_ALIGN_UP(32768) / 4096 = 8 pagine per il bitmap
    */
   pmm_state.bitmap_size = (pmm_state.total_pages + 7) / 8;
-  u64 bitmap_pages_needed = PAGE_ALIGN_UP(pmm_state.bitmap_size) / PAGE_SIZE;
+  u64 bitmap_pages_needed = PAGE_ALIGN_UP(pmm_state.bitmap_size) / arch_page_size();
 
   klog_info("PMM: Il bitmap richiede %lu bytes (%lu pagine)", pmm_state.bitmap_size, bitmap_pages_needed);
 
@@ -671,7 +673,7 @@ pmm_result_t pmm_free_page(void *page) {
   u64 addr = (u64)page;
 
   /* L'indirizzo deve essere allineato a PAGE_SIZE */
-  if (addr % PAGE_SIZE != 0) {
+  if (addr % arch_page_size() != 0) {
     return PMM_INVALID_ADDRESS;
   }
 
@@ -729,7 +731,7 @@ pmm_result_t pmm_free_pages(void *pages, size_t count) {
   }
 
   u64 addr = (u64)pages;
-  if (addr % PAGE_SIZE != 0) {
+  if (addr % arch_page_size() != 0) {
     return PMM_INVALID_ADDRESS;
   }
 
@@ -790,7 +792,7 @@ bool pmm_is_page_free(void *page) {
   }
 
   u64 addr = (u64)page;
-  if (addr % PAGE_SIZE != 0) {
+  if (addr % arch_page_size() != 0) {
     return false;
   }
 
@@ -840,9 +842,9 @@ void pmm_print_info(void) {
   klog_info("=== STATUS PHYSICAL MEMORY MANAGER ===");
   klog_info("Memoria totale: %lu MB (%lu pagine)", pmm_state.total_memory_bytes / MB, pmm_stats.total_pages);
   klog_info("Memoria utilizzabile: %lu MB", pmm_state.usable_memory_bytes / MB);
-  klog_info("Pagine libere: %lu (%lu MB)", pmm_stats.free_pages, pmm_stats.free_pages * PAGE_SIZE / MB);
-  klog_info("Pagine occupate: %lu (%lu MB)", pmm_stats.used_pages, pmm_stats.used_pages * PAGE_SIZE / MB);
-  klog_info("Pagine riservate: %lu (%lu MB)", pmm_stats.reserved_pages, pmm_stats.reserved_pages * PAGE_SIZE / MB);
+  klog_info("Pagine libere: %lu (%lu MB)", pmm_stats.free_pages, pmm_stats.free_pages * arch_page_size() / MB);
+  klog_info("Pagine occupate: %lu (%lu MB)", pmm_stats.used_pages, pmm_stats.used_pages * arch_page_size() / MB);
+  klog_info("Pagine riservate: %lu (%lu MB)", pmm_stats.reserved_pages, pmm_stats.reserved_pages * arch_page_size() / MB);
   klog_info("Bitmap: %lu pagine (%lu KB)", pmm_stats.bitmap_pages, pmm_state.bitmap_size / KB);
   klog_info("Operazioni: %lu allocazioni, %lu deallocazioni", pmm_stats.alloc_count, pmm_stats.free_count);
 
@@ -984,7 +986,7 @@ void pmm_print_fragmentation_info(void) {
   size_t largest_run = pmm_find_largest_free_run(&start_page);
 
   klog_info("=== ANALISI FRAMMENTAZIONE MEMORIA ===");
-  klog_info("Blocco contiguo più grande: %lu pagine (%lu MB)", largest_run, largest_run * PAGE_SIZE / MB);
+  klog_info("Blocco contiguo più grande: %lu pagine (%lu MB)", largest_run, largest_run * arch_page_size() / MB);
 
   if (largest_run > 0) {
     klog_info("Posizione: pagina %lu (indirizzo fisico 0x%lx)", start_page, PAGE_TO_ADDR(start_page));
@@ -1090,7 +1092,7 @@ void *pmm_alloc_aligned(size_t pages, size_t alignment) {
     return NULL;
   }
 
-  if (alignment < PAGE_SIZE || (alignment & (alignment - 1)) != 0) {
+  if (alignment < arch_page_size() || (alignment & (alignment - 1)) != 0) {
     return NULL;
   }
 
@@ -1171,7 +1173,7 @@ bool pmm_get_page_info(void *page, u64 *page_index, bool *is_free) {
   }
 
   u64 addr = (u64)page;
-  if (addr % PAGE_SIZE != 0) {
+  if (addr % arch_page_size() != 0) {
     return false; /* Indirizzo non allineato */
   }
 
@@ -1191,100 +1193,3 @@ bool pmm_get_page_info(void *page, u64 *page_index, bool *is_free) {
 
   return true; /* Informazioni valide */
 }
-
-/*
- * ============================================================================
- * CONCLUSIONI E NOTE PEDAGOGICHE
- * ============================================================================
- *
- * COSA ABBIAMO IMPARATO STUDIANDO QUESTO PMM:
- *
- * 1. GESTIONE MEMORIA FISICA:
- *    Il PMM è il "contabile" della memoria fisica. Tiene traccia di ogni
- *    pagina da 4KB e decide chi può usare cosa. È la base di tutto il
- *    memory management del kernel.
- *
- * 2. STRUTTURE DATI EFFICIENTI:
- *    Il bitmap è incredibilmente efficiente: 1 bit per pagina significa
- *    che per 4GB di RAM servono solo 128KB di metadata! Questa efficienza
- *    è cruciale perché il PMM deve essere veloce e usare poca memoria.
- *
- * 3. ALGORITMI E OTTIMIZZAZIONI:
- *    - First-fit con hint per locality: le allocazioni consecutive sono più veloci
- *    - Conservative initialization per sicurezza: meglio sprecare memoria che crashare
- *    - Lazy statistics update per performance: aggiorniamo incrementalmente
- *    - Sliding window per ricerca contigua: ottimizzazione intelligente
- *
- * 4. ARCHITETTURA MODULARE:
- *    Il PMM non sa nulla di x86_64, ARM, Limine, UEFI. È completamente
- *    architettura-agnostico e riceve info dal layer sottostante. Questo
- *    permette portabilità e testabilità.
- *
- * 5. ERROR HANDLING ROBUSTO:
- *    Ogni funzione controlla i precondizioni, valida gli input, e
- *    fallisce in modo pulito invece di corrompere lo stato. Nel kernel
- *    space, la robustezza è più importante della velocità.
- *
- * 6. DEBUGGING E DIAGNOSTICA:
- *    Funzioni come pmm_check_integrity() e pmm_print_fragmentation_info()
- *    sono essenziali per capire cosa sta succedendo quando qualcosa va storto.
- *
- * 7. THREAD-SAFETY AWARENESS:
- *    Anche se ora siamo single-threaded, abbiamo progettato il PMM pensando
- *    al futuro multithreading. Le statistiche e lo stato sono separati per
- *    facilitare l'aggiunta di lock.
- *
- * CONCETTI AVANZATI IMPARATI:
- *
- * - **Locality of Reference**: Le allocazioni consecutive sono più veloci
- * - **Fragmentation Analysis**: Come misurare e interpretare la frammentazione
- * - **Atomic Operations**: Operazioni tutto-o-niente per consistenza
- * - **Conservative Design**: Fallire in sicurezza quando in dubbio
- * - **Layer Separation**: Separare logica business da dettagli hardware
- *
- * PROSSIMI PASSI NEL JOURNEY DEL MEMORY MANAGEMENT:
- *
- * 1. **Virtual Memory Manager (VMM)**:
- *    - Paging e traduzione indirizzi virtuali → fisici
- *    - Isolamento dei processi (ogni processo vede la sua memoria)
- *    - Page tables e TLB management
- *    - Copy-on-write, demand paging, swapping
- *
- * 2. **Heap Allocator (kmalloc/kfree)**:
- *    - Allocazioni più piccole di PAGE_SIZE (malloc per il kernel)
- *    - Algoritmi: buddy system, slab allocator, o binary trees
- *    - Gestione frammentazione interna
- *
- * 3. **User Space Memory Manager**:
- *    - mmap(), brk(), malloc() per i processi utente
- *    - Virtual memory areas (VMAs)
- *    - Memory protection e permessi
- *
- * 4. **Advanced Features**:
- *    - NUMA awareness per sistemi multi-socket
- *    - Memory hotplug (aggiungere RAM a runtime)
- *    - Memory compression e zswap
- *    - Kernel Address Space Layout Randomization (KASLR)
- *
- * FILOSOFIA DEL DESIGN:
- *
- * Il PMM che abbiamo studiato segue principi solidi:
- * - **Semplicità**: Usa la struttura dati più semplice che funziona (bitmap)
- * - **Efficienza**: Ottimizzazioni intelligenti senza complicare troppo
- * - **Robustezza**: Fallisce in modo pulito, mai corruzione
- * - **Modularità**: Separazione clara delle responsabilità
- * - **Debugging**: Tools per capire cosa sta succedendo
- *
- * Questi principi ti serviranno per tutto lo sviluppo del kernel!
- *
- * RIFLESSIONE FINALE:
- *
- * Il memory management è uno dei sottosistemi più critici del kernel.
- * Un bug nel PMM può corrompere tutto il sistema. Ma una volta che
- * funziona bene, diventa la fondazione rock-solid su cui costruire
- * tutto il resto.
- *
- * Congratulazioni per aver completato lo studio di un PMM completo! 🎉
- * Ora hai una comprensione profonda di come i sistemi operativi gestiscono
- * la memoria fisica. È tempo di passare al Virtual Memory Manager! 🚀
- */

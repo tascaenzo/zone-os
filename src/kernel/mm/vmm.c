@@ -1,7 +1,9 @@
+#include <arch/x86_64/memory/vmm_defs.h>
 #include <klib/klog/klog.h>
 #include <klib/spinlock.h>
 #include <lib/string/string.h>
 #include <lib/types.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 
@@ -174,7 +176,7 @@ void vmm_init(void) {
   }
   spinlock_lock(&vmm_lock);
 
-  klog_info("VMM: PMM verificato - %lu MB disponibili", pmm_stats->free_pages * PAGE_SIZE / (1024 * 1024));
+  klog_info("VMM: PMM verificato - %lu MB disponibili", pmm_stats->free_pages * arch_page_size() / (1024 * 1024));
 
   // Delega l'inizializzazione all'arch layer (rilascia lock temporaneamente)
   spinlock_unlock(&vmm_lock);

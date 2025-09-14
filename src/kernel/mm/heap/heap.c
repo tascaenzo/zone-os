@@ -1,6 +1,7 @@
 #include "heap.h"
 #include "buddy.h"
 #include "slab.h"
+#include <arch/x86_64/memory/vmm_defs.h>
 #include <klib/bitmap/bitmap.h>
 #include <klib/klog/klog.h>
 #include <klib/list/list.h>
@@ -8,6 +9,7 @@
 #include <lib/stdio/stdio.h>
 #include <lib/string/string.h>
 #include <mm/memory.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 #include <mm/vmm.h>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arch/x86_64/memory/memory.h>
+#include <arch/memory.h>
 #include <lib/types.h>
 
 /* -------------------------------------------------------------------------- */
@@ -312,36 +312,3 @@ void *pmm_alloc_pages_in_range(size_t count, u64 min_addr, u64 max_addr);
  * @note alignment deve essere >= PAGE_SIZE e potenza di 2
  */
 void *pmm_alloc_aligned(size_t pages, size_t alignment);
-
-/*
- * ============================================================================
- * USAGE EXAMPLES
- * ============================================================================
- */
-
-/*
-// Basic single page allocation
-void *page = pmm_alloc_page();
-if (page) {
-    // Use the page...
-    pmm_free_page(page);
-}
-
-// Multi-page allocation for larger structures
-void *buffer = pmm_alloc_pages(16); // 64KB contiguous
-if (buffer) {
-    // Use 16 contiguous pages...
-    pmm_free_pages(buffer, 16);
-}
-
-// Check system memory status
-const pmm_stats_t *stats = pmm_get_stats();
-if (stats) {
-    printf("Free memory: %lu MB\n", stats->free_pages * PAGE_SIZE / MB);
-}
-
-// Debugging and integrity checks
-if (!pmm_check_integrity()) {
-    panic("PMM corruption detected!");
-}
-*/

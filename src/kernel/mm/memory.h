@@ -1,6 +1,8 @@
 #pragma once
 
-#include <arch/x86_64/memory/memory.h>
+#include <arch/memory.h>
+
+#define KCFG_MAX_MEM_REGIONS 512
 
 /*
  *

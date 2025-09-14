@@ -1,9 +1,11 @@
-#include "memory.h"
 #include "vmm_defs.h"
+#include <arch/memory.h>
 #include <arch/x86_64/cpu/cpu_lowlevel.h>
 #include <klib/klog/klog.h>
 #include <lib/string/string.h>
 #include <lib/types.h>
+#include <mm/memory.h>
+#include <mm/page.h>
 #include <mm/pmm.h>
 
 /**
@@ -378,8 +380,8 @@ void vmm_x86_64_init_paging(void) {
   vmm_x86_64_initialized = true;
   vmm_x86_64_stats.spaces_created = 1; // Kernel space
 
-  memory_region_t regions[ARCH_MAX_MEMORY_REGIONS];
-  size_t region_count = arch_memory_detect_regions(regions, ARCH_MAX_MEMORY_REGIONS);
+  memory_region_t regions[KCFG_MAX_MEM_REGIONS];
+  size_t region_count = arch_memory_detect_regions(regions, KCFG_MAX_MEM_REGIONS);
   u64 mapped_pages = 0;
 
   for (size_t i = 0; i < region_count; i++) {
@@ -827,4 +829,8 @@ void arch_vmm_debug_dump(vmm_space_t *space) {
 }
 bool arch_vmm_check_integrity(vmm_space_t *space) {
   return vmm_x86_64_check_integrity(space);
+}
+
+int arch_page_size(void) {
+  return PAGE_SIZE;
 }
