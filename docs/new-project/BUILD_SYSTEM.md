@@ -1,59 +1,59 @@
-# Build System
+# Sistema di build
 
-## Objectives
+## Obiettivi
 
-The build must be fast enough for daily development, simple enough to explain in a video and reproducible enough for CI.
+La build deve essere abbastanza veloce per lo sviluppo quotidiano, abbastanza semplice da spiegare in un video e abbastanza riproducibile per la CI.
 
-The build system must:
+Il sistema di build deve:
 
-- compile incrementally;
-- track header dependencies correctly;
-- support parallel compilation;
-- separate source and generated files;
-- provide debug, release and test configurations;
-- keep image generation separate from kernel compilation;
-- avoid requiring Docker for every edit;
-- pin external tool versions where practical.
+- compilare in modo incrementale;
+- tracciare correttamente le dipendenze dagli header;
+- supportare la compilazione parallela;
+- separare sorgenti e file generati;
+- offrire configurazioni debug, release e test;
+- mantenere separata la generazione dell'immagine dalla compilazione del kernel;
+- evitare di richiedere Docker a ogni modifica;
+- fissare le versioni degli strumenti esterni quando pratico.
 
-## Selected tools
+## Strumenti scelti
 
-- Meson: project configuration and dependency graph.
-- Ninja: incremental build execution.
-- Clang: primary C23 compiler.
-- LLD: primary linker.
-- Python: small portable orchestration tools.
-- QEMU: emulation and integration testing.
-- GDB: source-level debugging.
-- Limine: boot protocol and bootloader.
+- Meson: configurazione del progetto e grafo delle dipendenze.
+- Ninja: esecuzione incrementale della build.
+- Clang: compilatore C23 principale.
+- LLD: linker principale.
+- Python: piccoli strumenti portabili di orchestrazione.
+- QEMU: emulazione e test di integrazione.
+- GDB: debugging a livello sorgente.
+- Limine: protocollo di boot e bootloader.
 
-## Build stages
+## Fasi della build
 
 ```text
-C and assembly sources
+Sorgenti C e assembly
         |
         v
-Object files
+File oggetto
         |
         v
 kernel.elf
         |
-        +----> debug symbols and map file
+        +----> simboli di debug e map file
         |
         v
-staged boot tree
+albero di boot preparato
         |
         v
-UEFI image
+immagine UEFI
         |
         v
 QEMU
 ```
 
-Each stage must be represented by explicit inputs and outputs. A stage runs only when its inputs change.
+Ogni fase deve avere input e output espliciti. Una fase viene eseguita solo quando cambiano i suoi input.
 
-## Expected commands
+## Comandi previsti
 
-The public interface should remain small:
+L'interfaccia pubblica deve restare piccola:
 
 ```bash
 ./tools/dev setup
@@ -64,47 +64,47 @@ The public interface should remain small:
 ./tools/dev clean
 ```
 
-`tools/dev` is only a thin command dispatcher. It must not reimplement compiler dependency logic.
+`tools/dev` è soltanto un dispatcher sottile. Non deve reimplementare la logica delle dipendenze del compilatore.
 
-Equivalent lower-level commands remain documented:
+I comandi di livello inferiore restano documentati:
 
 ```bash
 meson setup build/debug --cross-file config/x86_64.ini --buildtype=debug
 meson compile -C build/debug
 ```
 
-## Build profiles
+## Profili di build
 
 ### Debug
 
-- debug information;
-- frame pointers;
-- assertions;
-- detailed logging;
-- allocator integrity checks;
-- minimal optimization.
+- informazioni di debug;
+- frame pointer;
+- assertion;
+- logging dettagliato;
+- controlli di integrità degli allocator;
+- ottimizzazione minima.
 
 ### Release
 
-- optimized kernel;
-- reduced logging;
-- separate or preserved symbols for postmortem debugging;
-- no correctness dependency on disabled assertions.
+- kernel ottimizzato;
+- logging ridotto;
+- simboli separati o conservati per il debugging post-mortem;
+- nessuna dipendenza di correttezza da assertion disabilitate.
 
 ### Test
 
-- test registry enabled;
-- deterministic QEMU configuration;
-- machine-readable exit code;
-- optional fault-injection targets.
+- registro dei test abilitato;
+- configurazione QEMU deterministica;
+- codice di uscita leggibile dalla macchina;
+- target opzionali per fault injection.
 
-## Image-generation policy
+## Politica di generazione dell'immagine
 
-Kernel compilation and boot-image construction are separate targets. Recompiling a source file must not repartition or reformat an image unless the kernel ELF actually changed.
+La compilazione del kernel e la costruzione dell'immagine di boot sono target separati. Ricompilare un sorgente non deve ripartizionare o riformattare un'immagine, salvo che `kernel.elf` sia realmente cambiato.
 
-The first release targets UEFI only. Legacy BIOS support is a later, isolated feature.
+La prima release supporta solo UEFI. Il BIOS legacy è una funzionalità successiva e isolata.
 
-The staged boot tree should look like:
+L'albero di boot preparato deve essere simile a:
 
 ```text
 build/debug/sysroot/
@@ -116,28 +116,28 @@ build/debug/sysroot/
         └── BOOTX64.EFI
 ```
 
-## Dependency management
+## Gestione delle dipendenze
 
-External bootloader artifacts must be pinned to a known version. Downloads should be verified with a checksum. The repository should not depend on mutable files installed at paths such as `/opt/limine`.
+Gli artefatti esterni del bootloader devono essere fissati a una versione nota. I download devono essere verificati con checksum. Il repository non deve dipendere da file mutabili installati in percorsi come `/opt/limine`.
 
-Host dependencies are checked by `tools/dev setup`. That command reports missing tools and does not silently install system packages.
+Le dipendenze host vengono controllate da `tools/dev setup`. Il comando segnala gli strumenti mancanti e non installa silenziosamente pacchetti di sistema.
 
-## Container policy
+## Politica dei container
 
-Local development uses the native toolchain for speed. A container image provides a reproducible reference environment for CI and users who prefer isolation.
+Lo sviluppo locale usa la toolchain nativa per velocità. Un'immagine container fornisce un ambiente di riferimento riproducibile per CI e per chi preferisce l'isolamento.
 
-The container must not be rebuilt for each source change. Source directories may be mounted into a previously built development image.
+Il container non deve essere ricostruito a ogni modifica dei sorgenti. Le directory del progetto possono essere montate in un'immagine di sviluppo già costruita.
 
-## Performance expectations
+## Aspettative prestazionali
 
-After the initial configuration:
+Dopo la configurazione iniziale:
 
-- no-op build should complete almost immediately;
-- editing one C file should compile one object and relink;
-- documentation changes should not rebuild the kernel;
-- QEMU launch should not trigger a clean build;
-- test selection should avoid running unrelated suites.
+- una build senza modifiche deve terminare quasi subito;
+- modificare un file C deve compilare un solo oggetto e rilinkare;
+- le modifiche alla documentazione non devono ricostruire il kernel;
+- l'avvio di QEMU non deve forzare una clean build;
+- la selezione dei test deve evitare suite non correlate.
 
-## Build observability
+## Osservabilità della build
 
-The build should be inspectable with standard Meson and Ninja tooling. Custom scripts must print the exact failed command and return its exit status unchanged.
+La build deve essere ispezionabile con gli strumenti standard di Meson e Ninja. Gli script personalizzati devono stampare il comando esatto fallito e restituirne invariato il codice di uscita.

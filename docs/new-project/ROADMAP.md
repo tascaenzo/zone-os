@@ -1,170 +1,170 @@
-# Roadmap and Milestones
+# Roadmap e milestone
 
-Each milestone must end with an observable result, automated verification where practical, updated documentation and a tagged repository state.
+Ogni milestone deve terminare con un risultato osservabile, una verifica automatizzata quando possibile, documentazione aggiornata e uno stato del repository contrassegnato da un tag.
 
-## M0 — Reproducible workspace
+## M0 — Workspace riproducibile
 
-Deliverables:
+Deliverable:
 
-- Meson cross file for x86_64;
-- Ninja incremental build;
-- Clang and LLD toolchain configuration;
-- dependency checker;
-- debug and release build directories;
-- QEMU launcher;
-- GDB launcher;
-- CI build job.
+- cross file Meson per x86_64;
+- build incrementale con Ninja;
+- configurazione della toolchain Clang e LLD;
+- controllo delle dipendenze;
+- directory di build debug e release;
+- launcher QEMU;
+- launcher GDB;
+- job CI di compilazione.
 
-Completion criteria:
+Criteri di completamento:
 
-- a clean clone can be configured with one documented command;
-- changing one C source recompiles only that translation unit and relinks;
-- build output never modifies the source tree.
+- un clone pulito può essere configurato con un singolo comando documentato;
+- modificare un sorgente C ricompila solo la relativa translation unit e rilinka;
+- gli output di build non modificano mai l’albero dei sorgenti.
 
-## M1 — Controlled UEFI boot
+## M1 — Boot UEFI controllato
 
-Deliverables:
+Deliverable:
 
-- Limine configuration;
+- configurazione Limine;
 - kernel ELF;
-- UEFI boot image;
-- validated bootloader requests;
-- serial initialization;
-- controlled halt path.
+- immagine di boot UEFI;
+- richieste al bootloader validate;
+- inizializzazione seriale;
+- percorso di halt controllato.
 
-Observable result:
+Risultato osservabile:
 
 ```text
-[boot] kernel entered
-[boot] Limine responses validated
-[ok] controlled boot complete
+[boot] ingresso nel kernel
+[boot] risposte Limine validate
+[ok] boot controllato completato
 ```
 
-## M2 — Diagnostics and CPU exceptions
+## M2 — Diagnostica ed eccezioni CPU
 
-Deliverables:
+Deliverable:
 
-- structured logging;
-- panic interface;
-- GDT and TSS;
+- logging strutturato;
+- interfaccia panic;
+- GDT e TSS;
 - IDT;
-- handlers for CPU exceptions;
-- register dump;
-- page-fault error decoding;
-- basic stack trace.
+- handler delle eccezioni CPU;
+- dump dei registri;
+- decodifica degli errori di page fault;
+- stack trace basilare.
 
-Completion criteria:
+Criteri di completamento:
 
-- intentional divide-by-zero and page-fault tests produce deterministic diagnostics;
-- panic does not allocate memory.
+- test intenzionali di divisione per zero e page fault producono diagnostica deterministica;
+- il panic non alloca memoria.
 
-## M3 — Physical memory management
+## M3 — Gestione della memoria fisica
 
-Deliverables:
+Deliverable:
 
-- normalized memory map;
-- page reservation rules;
-- bitmap allocator;
-- single-page and contiguous-page allocation as separate APIs;
-- double-free detection in debug builds;
-- statistics and integrity checks.
+- memory map normalizzata;
+- regole di riserva delle pagine;
+- allocator bitmap;
+- API separate per pagina singola e pagine contigue;
+- rilevamento double-free nelle build debug;
+- statistiche e controlli d’integrità.
 
-## M4 — Virtual memory management
+## M4 — Gestione della memoria virtuale
 
-Deliverables:
+Deliverable:
 
-- page-table walking;
-- map, unmap and resolve operations;
+- attraversamento delle page table;
+- operazioni map, unmap e resolve;
 - direct physical map;
-- high-half kernel mappings;
-- NX support;
-- TLB invalidation;
-- independent address-space object.
+- mapping high-half del kernel;
+- supporto NX;
+- invalidazione TLB;
+- oggetto address space indipendente.
 
-## M5 — Kernel dynamic memory
+## M5 — Memoria dinamica del kernel
 
-Deliverables:
+Deliverable:
 
-- early bump allocator;
-- page-backed heap;
-- simple free-list allocation;
-- alignment support;
-- debug poisoning and guard checks;
-- host-side allocator tests where possible.
+- bump allocator iniziale;
+- heap sostenuto da pagine;
+- allocator semplice a free list;
+- supporto all’allineamento;
+- poisoning e controlli guard nelle build debug;
+- test host-side dell’allocator quando possibile.
 
-Advanced buddy and slab allocators are postponed until measurements justify them.
+Buddy e slab allocator avanzati vengono rimandati finché misure concrete non ne giustificano l’introduzione.
 
-## M6 — Hardware interrupts and time
+## M6 — Interrupt hardware e tempo
 
-Deliverables:
+Deliverable:
 
-- local APIC initialization;
-- IOAPIC routing;
-- legacy PIC disable path;
-- timer calibration;
-- periodic timer interrupts;
-- interrupt registration API.
+- inizializzazione Local APIC;
+- routing IOAPIC;
+- disattivazione del PIC legacy;
+- calibrazione del timer;
+- interrupt periodici del timer;
+- API di registrazione degli interrupt.
 
-## M7 — Kernel threads
+## M7 — Thread kernel
 
-Deliverables:
+Deliverable:
 
-- thread representation;
-- per-thread kernel stack;
+- rappresentazione dei thread;
+- stack kernel per thread;
 - context switching;
 - ready queue;
 - idle thread;
-- round-robin scheduling;
+- scheduling round-robin;
 - preemption;
-- blocked and terminated states.
+- stati bloccato e terminato.
 
-## M8 — User mode
+## M8 — Modalità utente
 
-Deliverables:
+Deliverable:
 
-- Ring 3 entry and return;
-- user stack;
-- separate address space;
-- safe copy-to-user and copy-from-user primitives;
-- intentional user-fault isolation test.
+- ingresso e ritorno da Ring 3;
+- stack utente;
+- address space separato;
+- primitive sicure `copy_to_user` e `copy_from_user`;
+- test intenzionale di isolamento di un fault utente.
 
-## M9 — System calls
+## M9 — Chiamate di sistema
 
-Deliverables:
+Deliverable:
 
-- documented syscall ABI;
-- syscall dispatch;
-- `write`, `exit` and `yield`;
-- pointer and length validation;
-- unknown-syscall behavior.
+- ABI syscall documentata;
+- dispatch delle syscall;
+- `write`, `exit` e `yield`;
+- validazione di puntatori e lunghezze;
+- comportamento per syscall sconosciute.
 
-## M10 — Initramfs and ELF programs
+## M10 — Initramfs e programmi ELF
 
-Deliverables:
+Deliverable:
 
-- Limine module loading;
-- TAR initramfs reader;
-- ELF64 validation and loader;
-- initial process creation;
-- first user program.
+- caricamento moduli Limine;
+- lettore initramfs TAR;
+- validazione e loader ELF64;
+- creazione del processo iniziale;
+- primo programma utente.
 
-Observable result:
+Risultato osservabile:
 
 ```text
-hello from userspace
+ciao dallo spazio utente
 ```
 
-## M11 — Minimal VFS
+## M11 — VFS minimale
 
-Deliverables:
+Deliverable:
 
-- vnode model;
-- path lookup;
-- file descriptors;
+- modello vnode;
+- risoluzione dei percorsi;
+- file descriptor;
 - `/dev/console`;
-- initramfs mounted as root;
-- basic `open`, `read`, `write` and `close` interfaces.
+- initramfs montata come root;
+- interfacce basilari `open`, `read`, `write` e `close`.
 
-## Later milestones
+## Milestone successive
 
-Potential later work includes synchronization primitives, pipes, SMP, storage, FAT or ext2, networking, a shell and graphics. These must not be scheduled until the initial user-space cycle is stable.
+Il lavoro futuro può includere primitive di sincronizzazione, pipe, SMP, storage, FAT o ext2, networking, shell e grafica. Queste attività non devono essere pianificate finché il ciclo iniziale dello user space non è stabile.

@@ -1,41 +1,41 @@
-# Testing Strategy
+# Strategia di test
 
-## Goals
+## Obiettivi
 
-Testing must make low-level development safer without pretending that host-side tests replace real hardware behavior.
+I test devono rendere più sicuro lo sviluppo low-level senza fingere che i test host-side sostituiscano il comportamento reale dell’hardware.
 
-The project uses several complementary test layers:
+Il progetto usa più livelli complementari:
 
-1. host-side unit tests;
-2. kernel self-tests in QEMU;
-3. boot and integration tests;
-4. debug assertions and integrity checks;
-5. manual debugger-driven validation for architecture-specific behavior.
+1. unit test eseguiti sull’host;
+2. self-test del kernel in QEMU;
+3. test di boot e integrazione;
+4. assert e controlli d’integrità nelle build debug;
+5. validazione manuale con debugger per il comportamento specifico dell’architettura.
 
-## Host-side tests
+## Test host-side
 
-Pure logic should be designed so it can be compiled and executed as a normal host program.
+La logica pura deve essere progettata, quando possibile, per essere compilata ed eseguita come normale programma dell’host.
 
-Good candidates include:
+Candidati adatti:
 
-- bitmaps;
-- intrusive lists;
-- ring buffers;
-- string and memory functions;
-- formatting;
-- ELF validation;
-- TAR parsing;
-- VFS path resolution;
-- allocator metadata logic;
-- scheduler queue operations.
+- bitmap;
+- liste intrusive;
+- ring buffer;
+- funzioni stringa e memoria;
+- formattazione;
+- validazione ELF;
+- parsing TAR;
+- risoluzione dei percorsi VFS;
+- logica dei metadati degli allocator;
+- operazioni sulle code dello scheduler.
 
-Host tests must not silently rely on behavior unavailable in the freestanding kernel. Shared code should use small compatibility boundaries.
+I test host non devono dipendere silenziosamente da comportamenti assenti nel kernel freestanding. Il codice condiviso deve usare confini di compatibilità piccoli ed espliciti.
 
-## Kernel self-tests
+## Self-test del kernel
 
-Kernel tests execute inside QEMU and validate code that depends on CPU state, page tables or interrupts.
+I test kernel vengono eseguiti in QEMU e validano codice dipendente da stato CPU, page table o interrupt.
 
-Initial suites:
+Suite iniziali:
 
 ```text
 boot
@@ -50,7 +50,7 @@ syscalls
 elf
 ```
 
-Tests should be selectable:
+I test devono essere selezionabili:
 
 ```bash
 ./tools/dev test pmm
@@ -58,82 +58,80 @@ Tests should be selectable:
 ./tools/dev test all
 ```
 
-## QEMU exit protocol
+## Protocollo di uscita da QEMU
 
-The test kernel should terminate QEMU through a deterministic debug-exit device or another documented mechanism. CI must receive a meaningful success or failure status instead of parsing only human-readable output.
+Il kernel di test deve terminare QEMU tramite un dispositivo debug-exit deterministico o un altro meccanismo documentato. La CI deve ricevere uno stato significativo di successo o errore, non limitarsi a interpretare l’output testuale.
 
-Serial output remains available for diagnostics:
+La seriale resta disponibile per la diagnostica:
 
 ```text
 [test] pmm.allocate_single_page ... PASS
 [test] pmm.reject_double_free ... PASS
 [test] pmm.reserve_kernel_range ... PASS
-[summary] 3 passed, 0 failed
+[summary] 3 superati, 0 falliti
 ```
 
-## Fault-injection tests
+## Test con fault intenzionali
 
-Expected CPU faults should be tested deliberately:
+Devono essere verificati deliberatamente:
 
-- divide by zero;
-- invalid opcode;
+- divisione per zero;
+- opcode non valido;
 - general-protection fault;
-- non-present page fault;
-- write-protection fault;
-- user access to supervisor memory.
+- page fault su pagina non presente;
+- page fault per protezione in scrittura;
+- accesso utente a memoria supervisor.
 
-A test passes only when the correct vector, error code and diagnostic behavior are observed.
+Un test passa solo quando vengono osservati vettore, codice d’errore e comportamento diagnostico corretti.
 
-## Memory tests
+## Test della memoria
 
-Memory-manager tests must verify more than successful allocation.
+I test dei memory manager devono verificare più della semplice allocazione riuscita:
 
-Required cases include:
+- comportamento a memoria esaurita;
+- allineamento;
+- protezione delle regioni riservate;
+- rilevamento double-free;
+- rifiuto di mapping sovrapposti;
+- politica di sostituzione dei mapping;
+- applicazione dei permessi;
+- aggiornamenti visibili alla TLB;
+- pulizia dopo fallimenti parziali.
 
-- exhausted allocator behavior;
-- alignment;
-- reserved-region protection;
-- double-free detection;
-- overlapping mapping rejection;
-- mapping replacement policy;
-- permission enforcement;
-- TLB-visible updates;
-- cleanup after partial failure.
+## Strumentazione debug
 
-## Debug instrumentation
+Le build debug possono abilitare:
 
-Debug builds may enable:
+- poisoning delle allocazioni;
+- red zone;
+- canary;
+- controlli d’integrità delle liste;
+- verifica delle page table;
+- controlli di proprietà dei lock;
+- report panic dettagliati.
 
-- allocation poisoning;
-- red zones;
-- canaries;
-- list integrity checks;
-- page-table verification;
-- lock ownership checks;
-- verbose panic reports.
+Questi controlli devono essere protetti da opzioni di build e non devono cambiare l’API esterna prevista.
 
-These checks must be isolated behind build options and must not alter the intended external API.
+## Integrazione continua
 
-## Continuous integration
-
-The initial CI pipeline should include:
+La pipeline CI iniziale comprende:
 
 ```text
-format or style checks
-Meson configure
-Clang debug build
-Clang release build
-host unit tests
-QEMU boot smoke test
-selected kernel tests
+controlli di formato o stile
+configurazione Meson
+build debug Clang
+build release Clang
+unit test host
+smoke test di boot QEMU
+test kernel selezionati
 ```
 
-A GCC compatibility build can be added after the primary Clang toolchain is stable.
+Una build di compatibilità GCC può essere aggiunta dopo la stabilizzazione della toolchain Clang.
 
-## Determinism
+## Determinismo
 
-Automated QEMU tests should use a fixed machine configuration, fixed memory size and explicit CPU model where practical. Tests must avoid real-time assumptions unless they are specifically testing timekeeping.
+I test QEMU automatici devono usare configurazione macchina, quantità di RAM e modello CPU espliciti e stabili quando possibile. I test devono evitare assunzioni sul tempo reale, salvo quando verificano specificamente il timekeeping.
 
-## Test ownership
+## Proprietà dei test
 
-Every milestone defines its own completion tests. A pull request that fixes a bug should add a regression test whenever the failure can be reproduced deterministically.
+Ogni milestone definisce i propri test di completamento. Una PR che corregge un bug deve aggiungere un test di regressione quando il fallimento è riproducibile in modo deterministico.

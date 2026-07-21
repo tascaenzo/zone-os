@@ -1,16 +1,16 @@
-# Portability and Abstraction Strategy
+# Strategia di portabilità e astrazione
 
-The project starts on **x86_64 in 64-bit mode**, but the codebase should avoid turning x86_64 mechanisms into universal kernel concepts.
+Il progetto parte da **x86_64 in modalità a 64 bit**, ma il codice non deve trasformare i meccanismi x86_64 in concetti universali del kernel.
 
-The goal is not immediate multi-architecture support. The goal is to preserve clear boundaries so that a future backend can be added without rewriting the generic kernel.
+L’obiettivo non è supportare subito più architetture. L’obiettivo è mantenere confini chiari, così che un backend futuro possa essere aggiunto senza riscrivere il kernel generico.
 
-## Core principle
+## Principio fondamentale
 
-> Abstract stable concepts, not hypothetical hardware.
+> Astrarre i concetti stabili, non l’hardware ipotetico.
 
-We should not invent a large universal HAL before understanding the needs of the first implementation. We should instead isolate direct hardware access, expose small contracts and revise those contracts only when concrete evidence requires it.
+Non va progettata in anticipo una HAL universale e molto estesa. È preferibile isolare l’accesso diretto all’hardware, esporre contratti piccoli e modificarli solo quando requisiti concreti lo richiedono.
 
-## Source-tree boundary
+## Confine nell’albero dei sorgenti
 
 ```text
 kernel/
@@ -34,83 +34,72 @@ kernel/
 └── lib/
 ```
 
-The exact layout may evolve, but these ownership rules should remain:
+Regole di proprietà:
 
-- `arch/x86_64` owns instructions, registers, descriptor tables and page-table formats;
-- generic memory management owns allocation and mapping policy;
-- generic scheduling owns thread states and policy;
-- architecture code owns low-level context switching;
-- boot-protocol adapters own Limine structures;
-- generic kernel code consumes normalized boot information;
-- device-independent code consumes interfaces, not APIC or COM1 registers.
+- `arch/x86_64` possiede istruzioni, registri, descriptor table e formati delle page table;
+- la memoria generica possiede politiche di allocazione e mapping;
+- lo scheduler generico possiede stati e politiche dei thread;
+- il backend architetturale possiede il context switch low-level;
+- gli adapter di boot possiedono le strutture Limine;
+- il kernel generico consuma informazioni di boot normalizzate;
+- il codice indipendente dai device usa interfacce, non registri APIC o COM1.
 
-## What must remain architecture-specific
+## Elementi specifici dell’architettura
 
-- entry assembly;
-- CPU feature detection;
-- control-register access;
-- MSR access;
-- exception and interrupt stubs;
-- GDT, TSS and IDT construction;
-- page-table entry encoding;
-- TLB invalidation instructions;
-- context-switch assembly;
-- privilege transition assembly;
-- syscall entry assembly;
-- port IO;
-- architecture-specific barriers;
-- APIC register access.
+- assembly di ingresso;
+- rilevamento delle feature CPU;
+- accesso a control register e MSR;
+- stub di eccezioni e interrupt;
+- costruzione di GDT, TSS e IDT;
+- codifica delle entry delle page table;
+- istruzioni di invalidazione TLB;
+- assembly di context switch;
+- transizioni di privilegio;
+- ingresso delle syscall;
+- port I/O;
+- memory barrier specifiche;
+- accesso ai registri APIC.
 
-## What should be generic
+## Elementi generici
 
-- log formatting and routing;
-- panic policy;
-- normalized exception reporting;
-- physical-page ownership;
-- allocation policy;
-- address-space lifecycle;
-- generic mapping permissions;
-- heap allocation;
-- scheduler policy and queues;
-- thread and process state;
-- syscall semantics;
-- ELF parsing framework;
-- VFS;
-- file descriptors;
-- initramfs archive handling;
-- tests for pure algorithms and parsers.
+- formattazione e routing dei log;
+- politica di panic;
+- reporting normalizzato delle eccezioni;
+- proprietà delle pagine fisiche;
+- politiche di allocazione;
+- ciclo di vita degli address space;
+- permessi di mapping generici;
+- heap;
+- code e politica dello scheduler;
+- stato di thread e processi;
+- semantica delle syscall;
+- framework di parsing ELF;
+- VFS e file descriptor;
+- gestione dell’archivio initramfs;
+- test di algoritmi e parser puri.
 
-## Address types
+## Tipi di indirizzo
 
-Avoid passing unlabelled integers when the address domain matters.
+Evitare interi privi di significato quando il dominio dell’indirizzo è importante:
 
 ```c
-typedef struct {
-    uintptr_t value;
-} paddr_t;
-
-typedef struct {
-    uintptr_t value;
-} vaddr_t;
+typedef struct { uintptr_t value; } paddr_t;
+typedef struct { uintptr_t value; } vaddr_t;
 ```
 
-These wrappers prevent accidental mixing and allow architecture-specific validation at boundaries.
-
-Operations should be explicit:
+Le operazioni devono essere esplicite:
 
 ```c
 [[nodiscard]] bool paddr_add(paddr_t base, size_t offset, paddr_t *out);
 [[nodiscard]] bool vaddr_add(vaddr_t base, size_t offset, vaddr_t *out);
 ```
 
-## CPU context
+## Contesto CPU
 
-Do not force one universal register structure on every subsystem.
+Non imporre un’unica struttura universale dei registri. Usare due livelli:
 
-Use two layers:
-
-1. an architecture-owned raw context containing exact saved registers;
-2. a generic diagnostic view containing common fields and accessors.
+1. un contesto grezzo posseduto dall’architettura;
+2. una vista diagnostica generica.
 
 ```c
 struct arch_cpu_context;
@@ -123,11 +112,11 @@ struct execution_view {
 };
 ```
 
-The architecture backend converts or exposes accessors without discarding raw information.
+Il backend conserva sempre le informazioni specifiche complete.
 
-## Exceptions
+## Eccezioni
 
-Generic code should reason about categories:
+Il codice generico ragiona per categorie:
 
 ```c
 enum exception_class {
@@ -140,11 +129,11 @@ enum exception_class {
 };
 ```
 
-The x86_64 backend retains the vector number and architecture-specific error code.
+Il backend x86_64 conserva vettore e codice d’errore specifico.
 
-## Virtual memory
+## Memoria virtuale
 
-Generic VM permissions must not match x86_64 page-table bits by accident.
+I permessi generici non devono coincidere accidentalmente con i bit x86_64:
 
 ```c
 enum vm_permission {
@@ -156,15 +145,11 @@ enum vm_permission {
 };
 ```
 
-The x86_64 backend translates these into present, writable, user, global and NX semantics.
+Il backend traduce questi valori nei bit present, writable, user, global e NX. La dimensione delle pagine deve provenire dal contratto dell’architettura o dalla configurazione del target, non da costanti duplicate.
 
-Page size should be obtained through the architecture contract or build-time target description rather than repeated as a magic constant.
+## Interrupt
 
-## Interrupts
-
-Generic interrupt dispatch should not assume that every platform uses numbered IDT vectors.
-
-A generic interrupt source can contain an opaque platform identifier:
+Il dispatch generico non deve assumere che ogni piattaforma usi vettori IDT numerati.
 
 ```c
 struct interrupt_source {
@@ -172,127 +157,98 @@ struct interrupt_source {
 };
 ```
 
-Registration, masking and acknowledgement are operations supplied by the controller backend.
+Registrazione, masking e acknowledgement sono operazioni del backend del controller. Il primo backend può mappare direttamente l’identificatore su vettori x86_64 e route IOAPIC.
 
-The first backend may map this directly to x86_64 vectors and IOAPIC entries.
+## Tempo
 
-## Time
+Separare:
 
-Separate:
+- **clock source**: valore che avanza continuamente;
+- **clock event device**: programma un interrupt futuro;
+- **timekeeping del kernel**: converte e accumula il tempo;
+- **politica dello scheduler**: decide come usare il tempo.
 
-- **clock source**: reads a continuously advancing value;
-- **clock event device**: asks hardware to interrupt at or after a deadline;
-- **kernel timekeeping**: converts and accumulates time;
-- **scheduler tick policy**: decides how the scheduler uses time.
-
-Do not let the scheduler read LAPIC or TSC registers directly.
+Lo scheduler non deve leggere direttamente LAPIC o TSC.
 
 ## Scheduler
 
-The generic scheduler owns:
+Il livello generico possiede stati, run queue, politica, blocco/risveglio e durata dei thread. Il backend architetturale possiede contesto iniziale, switch low-level e transizioni kernel/utente.
 
-- thread states;
-- run queues;
-- policy;
-- block/wake transitions;
-- lifetime rules.
+## Protocolli di boot
 
-The architecture backend owns:
-
-- initial register context;
-- low-level switch;
-- interrupt-return mechanics;
-- user/kernel transition details.
-
-## Boot protocols
-
-Limine is an adapter, not the kernel's internal boot model.
+Limine è un adapter, non il modello interno del kernel:
 
 ```text
-Limine structures
-      ↓ validate and normalize
-kernel boot_info
-      ↓ consumed by
-PMM, framebuffer, modules, firmware discovery
+strutture Limine
+      ↓ validazione e normalizzazione
+boot_info del kernel
+      ↓
+PMM, framebuffer, moduli, firmware
 ```
 
-No subsystem outside the boot adapter should include `limine.h`.
+Nessun sottosistema esterno all’adapter deve includere `limine.h`.
 
-## Firmware and hardware description
+## Firmware e descrizione hardware
 
-UEFI is used for the initial boot, while ACPI will describe relevant x86_64 hardware.
+UEFI viene usato per il boot iniziale; ACPI descrive l’hardware x86_64 rilevante. I parser di ACPI producono modelli validati e normalizzati: i driver dei controller non devono analizzare direttamente le tabelle firmware.
 
-Generic code should receive discovered resources through normalized models. For example, the interrupt-controller subsystem should not parse ACPI itself. ACPI parsing discovers controllers and passes validated descriptions to their drivers.
+## Driver
 
-## Drivers
+Preferire interfacce basate sulle capacità:
 
-Prefer capability-oriented interfaces over architecture names.
-
-Examples:
-
-- byte-output sink;
-- interrupt controller;
+- sink di output byte;
+- controller interrupt;
 - clock source;
 - clock event device;
 - framebuffer;
 - block device;
 - network device.
 
-The early serial driver may be x86_64/QEMU-specific, but logging only sees a byte-output sink.
+Il driver seriale iniziale può essere specifico di x86_64/QEMU, mentre il logger vede soltanto un sink di byte.
 
-## Build-system abstraction
+## Astrazione del build system
 
-The build configuration should select:
+La configurazione seleziona:
 
-- architecture sources;
-- architecture compiler flags;
+- sorgenti dell’architettura;
+- flag specifici;
 - linker script;
-- boot image strategy;
-- emulator arguments;
-- debugger architecture;
-- firmware assets.
+- strategia dell’immagine di boot;
+- argomenti dell’emulatore;
+- architettura del debugger;
+- asset firmware.
 
-A future architecture should add configuration and backend code rather than fork all build logic.
+Una nuova architettura deve aggiungere configurazione e backend, non duplicare tutta la build.
 
-## Abstraction review checklist
+## Checklist di revisione delle astrazioni
 
-Before merging a subsystem:
+- [ ] Il codice generico include inutilmente header specifici?
+- [ ] Bit hardware trapelano in enum generici?
+- [ ] Una struttura del bootloader sopravvive oltre l’early boot?
+- [ ] Un indirizzo fisico viene trattato come puntatore dereferenziabile?
+- [ ] Scheduler o VM generici eseguono assembly x86?
+- [ ] Un nome specifico viene usato per un concetto generico?
+- [ ] L’interfaccia risponde a un requisito reale?
+- [ ] Un backend finto host-side può testare la logica?
+- [ ] La semantica degli errori è documentata?
+- [ ] L’astrazione è più piccola dell’implementazione che nasconde?
 
-- [ ] Does generic code include an architecture-specific header unnecessarily?
-- [ ] Are hardware bit positions leaking into generic enums?
-- [ ] Is a bootloader structure stored beyond early boot?
-- [ ] Is a physical address being treated as a dereferenceable pointer?
-- [ ] Does a scheduler or VM policy function execute x86 assembly directly?
-- [ ] Is a platform-specific name used for a generic concept?
-- [ ] Is the proposed interface based on a real current requirement?
-- [ ] Could a host-side fake backend test the generic logic?
-- [ ] Are failure semantics documented?
-- [ ] Is the abstraction smaller than the implementation it hides?
+## Evitare la falsa portabilità
 
-## Avoid false portability
+Non bisogna:
 
-Do not:
+- creare directory ARM64 o RISC-V vuote solo per dichiarare portabilità;
+- aggiungere callback per ogni feature immaginabile;
+- disseminare `#ifdef` nel codice generico;
+- fingere che segmentazione x86 e livelli di eccezione ARM siano identici;
+- eliminare informazioni specifiche utili dalla diagnostica;
+- ottimizzare per una seconda architettura prima che la prima sia corretta.
 
-- implement empty ARM64 or RISC-V directories merely to claim portability;
-- add callbacks for every imaginable architecture feature;
-- use preprocessor conditionals throughout generic code;
-- pretend x86 segmentation and ARM exception levels are identical;
-- erase useful platform information from diagnostics;
-- optimize for a second architecture before the first backend is correct.
+## Validazione futura
 
-## Future validation strategy
+Dopo la stabilizzazione di M0–M11 verrà scelto un target minimo:
 
-After M0–M11 are stable, choose one minimal validation target:
+- ARM64 sotto QEMU con UEFI, oppure
+- RISC-V 64 sotto QEMU con SBI/OpenSBI.
 
-- ARM64 under QEMU with UEFI, or
-- RISC-V 64 under QEMU with SBI/OpenSBI.
-
-The validation target only needs to reach selected milestones initially:
-
-1. build;
-2. boot;
-3. serial output;
-4. exceptions;
-5. physical memory discovery.
-
-Any abstraction that makes the second backend harder without making the first backend clearer should be reconsidered.
+Il secondo backend dovrà inizialmente raggiungere solo build, boot, seriale, eccezioni e scoperta della memoria fisica. Qualunque astrazione renda il secondo backend più difficile senza chiarire il primo dovrà essere rivalutata.

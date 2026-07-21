@@ -1,27 +1,27 @@
-# C23 Language Policy
+# Politica del linguaggio C23
 
 ## Standard
 
-The kernel is written in ISO C23 and compiled in freestanding mode.
+Il kernel è scritto in ISO C23 e compilato in modalità freestanding.
 
-Primary compiler mode:
+Modalità principale del compilatore:
 
 ```text
 -std=c23 -ffreestanding
 ```
 
-GNU language modes such as `gnu23` are not the default. Compiler extensions may be used only when they solve a concrete low-level requirement and are hidden behind project macros or architecture-specific interfaces.
+Le modalità GNU come `gnu23` non sono il default. Le estensioni del compilatore possono essere usate solo quando risolvono un requisito concreto di basso livello e devono essere nascoste dietro macro del progetto o interfacce specifiche dell'architettura.
 
-## Compiler policy
+## Politica del compilatore
 
-- Clang is the primary compiler.
-- LLD is the primary linker.
-- A secondary GCC build should be added to CI when the initial toolchain is stable.
-- The minimum supported compiler version must be documented and pinned in CI.
+- Clang è il compilatore principale.
+- LLD è il linker principale.
+- Una build secondaria con GCC deve essere aggiunta alla CI quando la toolchain iniziale è stabile.
+- La versione minima supportata del compilatore deve essere documentata e fissata nella CI.
 
-## Useful C23 features
+## Funzionalità C23 utili
 
-The project may use modern features where they improve clarity or static verification:
+Il progetto può usare funzionalità moderne quando migliorano chiarezza o verifica statica:
 
 ```c
 static_assert(sizeof(struct interrupt_frame) == EXPECTED_SIZE);
@@ -35,11 +35,11 @@ pmm_status_t pmm_alloc_page(paddr_t *out_page);
 struct page *page = nullptr;
 ```
 
-Fixed underlying types for enumerations may be used for hardware flags and ABI values when compiler support is verified.
+I tipi sottostanti fissi per le enumerazioni possono essere usati per flag hardware e valori ABI quando il supporto del compilatore è stato verificato.
 
-## Freestanding environment
+## Ambiente freestanding
 
-Selecting C23 does not provide a hosted C library. The project may use compiler-provided freestanding headers where supported, including:
+Selezionare C23 non fornisce una libreria C hosted. Il progetto può usare gli header freestanding forniti dal compilatore, quando supportati, tra cui:
 
 - `<stddef.h>`
 - `<stdint.h>`
@@ -48,20 +48,20 @@ Selecting C23 does not provide a hosted C library. The project may use compiler-
 - `<stdalign.h>`
 - `<limits.h>`
 
-The kernel provides the runtime functions it requires, such as:
+Il kernel implementa le funzioni runtime che gli servono, come:
 
 - `memcpy`
 - `memmove`
 - `memset`
 - `memcmp`
 - `strlen`
-- formatting and logging primitives
+- primitive di formattazione e logging
 
-No kernel source may accidentally depend on the host libc.
+Nessun sorgente del kernel deve dipendere accidentalmente dalla libc dell'host.
 
-## Type policy
+## Politica dei tipi
 
-Prefer explicit standard-width types:
+Preferire tipi standard a larghezza esplicita:
 
 ```c
 uint8_t
@@ -72,18 +72,18 @@ uintptr_t
 size_t
 ```
 
-Project-specific semantic aliases are encouraged where they prevent address-space confusion:
+Sono incoraggiati alias semantici specifici del progetto quando prevengono confusione tra spazi di indirizzamento:
 
 ```c
 typedef uintptr_t paddr_t;
 typedef uintptr_t vaddr_t;
 ```
 
-Avoid globally defined ambiguous aliases such as `u8`, `u32` and `ulong` in educational-facing APIs.
+Evitare alias globali ambigui come `u8`, `u32` e `ulong` nelle API rivolte alla didattica.
 
-## Compiler abstraction
+## Astrazione del compilatore
 
-Compiler-specific syntax belongs in one small header, for example:
+La sintassi specifica del compilatore deve risiedere in un piccolo header, per esempio:
 
 ```c
 #pragma once
@@ -93,15 +93,15 @@ Compiler-specific syntax belongs in one small header, for example:
 #define K_ALIGNED(value) __attribute__((aligned(value)))
 #define K_SECTION(name) __attribute__((section(name)))
 #else
-#error "Unsupported compiler"
+#error "Compilatore non supportato"
 #endif
 ```
 
-Architecture headers may use these wrappers but should not duplicate raw attributes throughout the source tree.
+Gli header dell'architettura possono usare questi wrapper, ma non devono duplicare attributi grezzi in tutto l'albero dei sorgenti.
 
-## Warning policy
+## Politica dei warning
 
-Debug and CI builds should begin with a strict warning set:
+Le build debug e CI devono partire da un insieme rigoroso di warning:
 
 ```text
 -Wall
@@ -115,36 +115,36 @@ Debug and CI builds should begin with a strict warning set:
 -Wstrict-prototypes
 ```
 
-Warnings that are unsuitable for a specific low-level file should be disabled narrowly, with a comment explaining why. Global suppression is discouraged.
+I warning non adatti a uno specifico file low-level devono essere disabilitati nel punto più ristretto possibile, con un commento che ne spieghi il motivo. Le soppressioni globali sono sconsigliate.
 
-## Style principles
+## Principi di stile
 
-- Functions and variables use `snake_case`.
-- Types use descriptive names ending in `_t` only for project typedefs where appropriate.
-- Constants and macros use `UPPER_SNAKE_CASE`.
-- Public headers expose minimal APIs.
-- Functions return typed status values for recoverable failures.
-- Output parameters are validated.
-- Pointer arithmetic is isolated and commented.
-- Integer casts must make truncation or reinterpretation explicit.
+- Funzioni e variabili usano `snake_case`.
+- I tipi usano nomi descrittivi con suffisso `_t` solo per typedef del progetto, quando appropriato.
+- Costanti e macro usano `UPPER_SNAKE_CASE`.
+- Gli header pubblici espongono API minime.
+- Le funzioni restituiscono valori di stato tipizzati per gli errori recuperabili.
+- I parametri di output vengono validati.
+- L'aritmetica dei puntatori è isolata e commentata.
+- I cast interi devono rendere esplicita la troncatura o la reinterpretazione.
 
-## Assembly boundary
+## Confine con l'assembly
 
-Assembly is kept in separate `.S` files when possible. Inline assembly is reserved for small CPU primitives where the constraints are reviewed carefully.
+L'assembly viene mantenuto in file `.S` separati quando possibile. L'inline assembly è riservato a piccole primitive CPU i cui constraint siano stati revisionati con attenzione.
 
-Every assembly interface must document:
+Ogni interfaccia assembly deve documentare:
 
-- inputs and outputs;
-- clobbered registers;
-- stack layout;
+- input e output;
+- registri clobbered;
+- layout dello stack;
 - calling convention;
-- alignment assumptions.
+- requisiti di allineamento.
 
-## Feature adoption rule
+## Regola di adozione delle funzionalità
 
-The project uses C23 to improve correctness and readability, not to maximize novelty. A language feature is adopted only when:
+Il progetto usa C23 per migliorare correttezza e leggibilità, non per massimizzare la novità. Una funzionalità del linguaggio viene adottata solo quando:
 
-1. it is supported by the pinned primary compiler;
-2. it has a clear benefit;
-3. it can be explained to the audience;
-4. it does not obscure the generated machine-level behavior relevant to the lesson.
+1. è supportata dal compilatore principale fissato;
+2. offre un beneficio chiaro;
+3. può essere spiegata al pubblico;
+4. non nasconde il comportamento a livello macchina rilevante per la lezione.

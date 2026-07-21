@@ -1,66 +1,66 @@
-# Vision and Goals
+# Visione e obiettivi
 
-## Project statement
+## Dichiarazione del progetto
 
-The project is a small educational operating system for x86_64, developed in public through a structured Italian YouTube series.
+Il progetto è un piccolo sistema operativo educativo per x86_64, sviluppato pubblicamente attraverso una serie YouTube strutturata in italiano.
 
-It is not intended to compete with Linux, provide daily-driver functionality or support many architectures in its early stages. Its purpose is to demonstrate how a modern operating system grows from a controlled boot environment into a kernel capable of running isolated user programs.
+Non vuole competere con Linux, diventare un sistema operativo di uso quotidiano o supportare molte architetture nelle prime fasi. Il suo scopo è mostrare come un sistema operativo moderno cresca da un ambiente di boot controllato fino a un kernel capace di eseguire programmi utente isolati.
 
-## Primary goals
+## Obiettivi principali
 
-### Technical goals
+### Obiettivi tecnici
 
-- Boot reliably through Limine on UEFI systems.
-- Provide strong diagnostics from the first milestone.
-- Implement physical and virtual memory management.
-- Handle CPU exceptions and hardware interrupts correctly.
-- Support kernel threads and preemptive scheduling.
-- Enter x86_64 user mode.
-- Provide a small and documented system-call ABI.
-- Load ELF programs from an initramfs.
-- Introduce a simple VFS and console device.
+- Avviare il sistema in modo affidabile tramite Limine su UEFI.
+- Offrire diagnostica robusta fin dalla prima milestone.
+- Implementare gestione della memoria fisica e virtuale.
+- Gestire correttamente eccezioni CPU e interrupt hardware.
+- Supportare thread kernel e scheduling preemptive.
+- Entrare nella modalità utente x86_64.
+- Definire una piccola ABI per le chiamate di sistema.
+- Caricare programmi ELF da un’initramfs.
+- Introdurre una VFS semplice e un dispositivo console.
 
-### Educational goals
+### Obiettivi didattici
 
-- Explain each component before implementing it.
-- Keep commits and pull requests aligned with individual lessons.
-- Provide start and completion tags for every episode.
-- Show debugging and failures, not only the final working code.
-- Document trade-offs and rejected alternatives.
-- Make the repository usable without watching every video.
+- Spiegare ogni componente prima di implementarlo.
+- Allineare commit e pull request alle singole lezioni.
+- Fornire tag iniziale e finale per ogni episodio.
+- Mostrare debugging e fallimenti, non solo il risultato funzionante.
+- Documentare compromessi e alternative scartate.
+- Rendere il repository utilizzabile anche senza guardare ogni video.
 
-## Non-goals for the first development cycle
+## Non-obiettivi del primo ciclo
 
-The following areas are intentionally postponed:
+Sono intenzionalmente rimandati:
 
-- symmetric multiprocessing;
-- ARM or RISC-V ports;
+- multiprocessore simmetrico;
+- porting ARM o RISC-V;
 - USB;
-- networking;
-- graphical desktop environments;
-- advanced storage drivers;
-- POSIX compatibility;
+- rete;
+- desktop grafico;
+- driver storage avanzati;
+- compatibilità POSIX;
 - self-hosting;
-- a custom filesystem;
-- a strict microkernel architecture.
+- filesystem personalizzato;
+- architettura strettamente microkernel.
 
-## Definition of success
+## Definizione di successo
 
-The first major project cycle is successful when the system can:
+Il primo grande ciclo è completato quando il sistema può:
 
-1. boot reproducibly in QEMU;
-2. report failures through serial diagnostics;
-3. manage physical and virtual memory safely;
-4. schedule multiple kernel threads;
-5. enter Ring 3;
-6. load and execute an ELF program from an initramfs;
-7. allow that program to write to the console and exit through system calls;
-8. run automated host-side and QEMU integration tests in CI.
+1. avviarsi in modo riproducibile in QEMU;
+2. riportare i fallimenti tramite diagnostica seriale;
+3. gestire in sicurezza memoria fisica e virtuale;
+4. schedulare più thread kernel;
+5. entrare in Ring 3;
+6. caricare ed eseguire un programma ELF da initramfs;
+7. permettere al programma di scrivere sulla console e terminare tramite syscall;
+8. eseguire in CI test host-side e integrazione QEMU.
 
-## Design philosophy
+## Filosofia progettuale
 
-The system should prefer simple implementations that are easy to inspect and verify. More sophisticated data structures and optimizations are introduced only when a demonstrated limitation requires them.
+Il sistema deve preferire implementazioni semplici, facili da ispezionare e verificare. Strutture dati e ottimizzazioni più sofisticate vengono introdotte solo quando un limite dimostrato le rende necessarie.
 
-A bitmap physical allocator is preferred before a buddy allocator. A simple kernel heap is preferred before a slab allocator. Single-core scheduling is preferred before SMP. UEFI is preferred before adding legacy BIOS support.
+Una bitmap è preferita a un buddy allocator nella prima fase. Un heap semplice precede lo slab allocator. Lo scheduling single-core precede SMP. UEFI precede il supporto BIOS legacy.
 
-The project values a stable development process more than rapid accumulation of features.
+Il progetto attribuisce più valore a un processo di sviluppo stabile che all’accumulo rapido di funzionalità.

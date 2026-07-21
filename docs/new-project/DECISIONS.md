@@ -1,166 +1,166 @@
-# Architecture Decision Records
+# Decisioni architetturali
 
-This document lists the initial project decisions. As the project grows, each important decision may be moved into an individual file under `docs/adr/`.
+Questo documento raccoglie le decisioni iniziali del progetto. Con la crescita del sistema, ogni decisione importante potrà essere spostata in un file dedicato sotto `docs/adr/`.
 
-## ADR-001 — Start a separate operating-system project
+## ADR-001 — Avviare un nuovo progetto di sistema operativo
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-The new project is not a continuation or rewrite-in-place of Zone OS. Zone OS remains available as a record of previous experience. The new system begins from an empty repository with newly documented constraints.
+Il nuovo progetto non è una continuazione né una riscrittura nello stesso repository di Zone OS. Zone OS resta disponibile come testimonianza dell’esperienza precedente. Il nuovo sistema parte da un repository vuoto e da vincoli documentati da zero.
 
-Reasoning:
+**Motivazioni:**
 
-- avoids inheriting accidental complexity;
-- allows the build and teaching sequence to be designed from the beginning;
-- preserves Zone OS as a historical and educational reference;
-- prevents compatibility requirements with unfinished interfaces.
+- evita di ereditare complessità accidentale;
+- permette di progettare fin dall’inizio build e percorso didattico;
+- conserva Zone OS come riferimento storico;
+- evita requisiti di compatibilità con interfacce incomplete.
 
-## ADR-002 — Target x86_64 only initially
+## ADR-002 — Supportare inizialmente solo x86_64
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-The initial kernel supports x86_64 only.
+Il kernel iniziale supporta solo x86_64 in modalità a 64 bit.
 
-Reasoning:
+**Motivazioni:**
 
-Architecture abstraction is useful only after the real requirements of one implementation are understood. Premature multi-architecture interfaces can hide hardware behavior and complicate the educational path.
+Le astrazioni architetturali sono utili solo dopo aver compreso i requisiti reali di almeno un’implementazione. Interfacce multiarchitettura premature possono nascondere il comportamento hardware e complicare il percorso didattico.
 
-## ADR-003 — Use a modular monolithic kernel
+## ADR-003 — Usare un kernel monolitico modulare
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-The first system uses a monolithic address space with internal module boundaries.
+Il primo sistema usa un unico spazio di indirizzamento kernel con confini modulari interni.
 
-Reasoning:
+**Motivazioni:**
 
-This provides a direct path to memory management, scheduling and user space without introducing IPC and service isolation before the fundamentals are stable. A future microkernel experiment remains possible but is not an initial constraint.
+Fornisce un percorso diretto verso memoria, scheduling e user space senza introdurre IPC e isolamento dei servizi prima che le fondamenta siano stabili. Un futuro esperimento microkernel resta possibile, ma non è un vincolo iniziale.
 
-## ADR-004 — Use Limine and begin with UEFI
+## ADR-004 — Usare Limine e iniziare da UEFI
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Limine provides the boot protocol and initial loading environment. The first supported firmware path is UEFI.
+Limine fornisce protocollo di boot e ambiente di caricamento. Il primo percorso firmware supportato è UEFI.
 
-Reasoning:
+**Motivazioni:**
 
-- avoids writing a bootloader before writing the kernel;
-- provides a modern and documented loading environment;
-- reduces initial image-generation complexity;
-- allows legacy BIOS support to be taught later as a separate topic.
+- evita di scrivere un bootloader prima del kernel;
+- offre un ambiente moderno e documentato;
+- riduce la complessità iniziale di generazione delle immagini;
+- consente di trattare BIOS legacy come argomento separato.
 
-## ADR-005 — Use ISO C23 in freestanding mode
+## ADR-005 — Usare ISO C23 in modalità freestanding
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Kernel code uses `-std=c23` and `-ffreestanding`, with Clang as the primary compiler.
+Il codice kernel usa `-std=c23` e `-ffreestanding`, con Clang come compilatore principale.
 
-Reasoning:
+**Motivazioni:**
 
-C23 offers clearer attributes, static checks and modern language facilities while preserving a close relationship with the generated machine code. GNU extensions are isolated and used only when required.
+C23 offre attributi più chiari, verifiche statiche e strumenti moderni mantenendo una relazione stretta con il codice macchina generato. Le estensioni GNU vengono isolate e usate solo quando necessarie.
 
-## ADR-006 — Use Meson and Ninja
+## ADR-006 — Usare Meson e Ninja
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Meson describes the build and Ninja executes it incrementally.
+Meson descrive la build e Ninja la esegue incrementalmente.
 
-Reasoning:
+**Motivazioni:**
 
-The previous project relied on shell scripts, repeated source discovery and clean rebuilds. The new system requires explicit dependency tracking, fast incremental builds, multiple profiles and a workflow that remains understandable in videos.
+Il progetto precedente dipendeva da script shell, scansioni ripetute dei sorgenti e ricompilazioni pulite. Il nuovo sistema richiede dipendenze esplicite, build incrementali rapide, profili multipli e un flusso spiegabile nei video.
 
-## ADR-007 — Keep Docker optional during development
+## ADR-007 — Rendere Docker opzionale nello sviluppo
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Native tools are the preferred development path. A pinned container image provides reproducibility for CI and optional isolated development.
+Gli strumenti nativi sono il percorso di sviluppo preferito. Un’immagine container fissata garantisce riproducibilità in CI e sviluppo isolato opzionale.
 
-Reasoning:
+**Motivazioni:**
 
-Rebuilding or invoking an emulated x86_64 container for every source change creates unnecessary latency, especially on ARM hosts. Reproducibility remains important but should not make the local edit-build-run cycle inefficient.
+Ricostruire o invocare un container x86_64 emulato a ogni modifica introduce latenza inutile, soprattutto su host ARM. La riproducibilità resta importante, ma non deve penalizzare il ciclo modifica-build-run.
 
-## ADR-008 — Use serial output before framebuffer output
+## ADR-008 — Usare la seriale prima del framebuffer
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-The serial console is the first and primary diagnostic channel.
+La console seriale è il primo e principale canale diagnostico.
 
-Reasoning:
+**Motivazioni:**
 
-Serial output is simple, deterministic, capturable by CI and available before graphics initialization. Framebuffer output is introduced later as a driver and presentation layer.
+È semplice, deterministica, catturabile dalla CI e disponibile prima dell’inizializzazione grafica. Il framebuffer verrà introdotto successivamente come driver e livello di presentazione.
 
-## ADR-009 — Build diagnostics before advanced memory management
+## ADR-009 — Costruire la diagnostica prima della memoria avanzata
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Panic handling, exception reporting, register dumps and debugger integration precede custom paging and dynamic allocation.
+Panic, eccezioni, dump dei registri e integrazione con il debugger precedono paging personalizzato e allocazione dinamica.
 
-Reasoning:
+**Motivazioni:**
 
-Complex kernel subsystems are difficult to develop without trustworthy failure information. Diagnostic capability is treated as infrastructure, not polish.
+I sottosistemi complessi sono difficili da sviluppare senza informazioni affidabili sui fallimenti. La diagnostica è infrastruttura, non rifinitura.
 
-## ADR-010 — Prefer simple allocators first
+## ADR-010 — Preferire inizialmente allocator semplici
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-The physical allocator begins as a bitmap. The kernel heap begins with an early bump allocator followed by a simple page-backed free-list allocator.
+L’allocator fisico parte da una bitmap. L’heap parte da un bump allocator iniziale seguito da una free list sostenuta da pagine.
 
-Reasoning:
+**Motivazioni:**
 
-Buddy and slab allocators are valuable but add metadata and invariants before the project has demonstrated a need for them. They may be introduced later with measurements and tests.
+Buddy e slab sono utili, ma introducono metadati e invarianti prima che il progetto ne dimostri la necessità. Potranno essere aggiunti in seguito con misure e test.
 
-## ADR-011 — Make tests part of each milestone
+## ADR-011 — Integrare i test in ogni milestone
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Every milestone defines observable completion criteria and automated tests where practical.
+Ogni milestone definisce criteri osservabili di completamento e test automatici quando praticabile.
 
-Reasoning:
+**Motivazioni:**
 
-The repository supports both long-term maintenance and a teaching series. Reproducible tests let viewers distinguish implementation errors from environment problems and prevent later episodes from silently breaking earlier work.
+Il repository deve sostenere manutenzione e didattica. Test riproducibili aiutano a distinguere errori di implementazione da problemi ambientali e impediscono agli episodi successivi di rompere silenziosamente quelli precedenti.
 
-## ADR-012 — Align repository history with the video series
+## ADR-012 — Allineare la storia Git alla serie video
 
-Status: Accepted
+**Stato:** Accettata
 
-Decision:
+**Decisione:**
 
-Each episode has an issue, focused branch, notes, start tag and completion tag.
+Ogni episodio possiede issue, branch focalizzato, note, tag iniziale e tag finale.
 
-Reasoning:
+**Motivazioni:**
 
-A viewer must be able to reproduce the exact starting state, follow the implementation and compare the final result without interpreting unrelated later changes.
+Chi segue deve poter riprodurre lo stato iniziale esatto, seguire l’implementazione e confrontare il risultato senza interpretare modifiche successive non correlate.
 
-## ADR process
+## Processo ADR
 
-A new ADR is required when a decision:
+È richiesta una nuova ADR quando una decisione:
 
-- affects several subsystems;
-- changes a public kernel interface or ABI;
-- changes build or toolchain policy;
-- changes the roadmap materially;
-- introduces a difficult-to-reverse dependency;
-- changes the educational sequence.
+- coinvolge più sottosistemi;
+- modifica un’interfaccia pubblica o un’ABI;
+- modifica build o toolchain;
+- cambia significativamente la roadmap;
+- introduce una dipendenza difficile da invertire;
+- cambia l’ordine didattico.
 
-Each ADR should contain context, decision, consequences and rejected alternatives.
+Ogni ADR deve contenere contesto, decisione, conseguenze e alternative scartate.

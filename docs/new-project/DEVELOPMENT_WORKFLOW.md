@@ -1,14 +1,14 @@
-# Development Workflow
+# Flusso di sviluppo
 
-## Repository strategy
+## Strategia del repository
 
-The new operating system should ultimately live in a separate repository. Until that repository is created, these documents are staged in a dedicated Zone OS branch.
+Il nuovo sistema operativo dovrà vivere in un repository separato. Fino alla sua creazione, questi documenti restano su un branch dedicato di Zone OS.
 
-The main development branch remains releasable and each feature is introduced through a focused pull request.
+Il branch principale deve rimanere rilasciabile e ogni funzionalità viene introdotta tramite una pull request focalizzata.
 
-## Branch naming
+## Nomi dei branch
 
-Recommended prefixes:
+Prefissi consigliati:
 
 ```text
 build/
@@ -23,108 +23,108 @@ docs/
 episode/
 ```
 
-Examples:
+Esempi:
 
 ```text
-episode/03-incremental-build
-mm/bitmap-page-allocation
+episode/03-build-incrementale
+mm/allocazione-pagine-bitmap
 arch/x86_64-page-fault-handler
 ```
 
-## Commit policy
+## Politica dei commit
 
-Commits should describe one logical change and use an imperative, subsystem-oriented subject:
+Ogni commit deve descrivere una singola modifica logica e usare un oggetto imperativo orientato al sottosistema:
 
 ```text
-build: add x86_64 Meson cross file
-boot: validate Limine memory-map response
-serial: add COM1 polling output
-mm: reserve bootloader-owned pages
-test: add PMM double-free case
-docs: explain high-half address layout
+build: aggiungi il cross file Meson x86_64
+boot: valida la risposta della memory map Limine
+serial: aggiungi output polling su COM1
+mm: riserva le pagine possedute dal bootloader
+test: aggiungi il caso PMM double-free
+docs: spiega il layout high-half
 ```
 
-Avoid commits that mix formatting, refactoring, new behavior and documentation without a strong reason.
+Evitare commit che mescolano formattazione, refactoring, nuovo comportamento e documentazione senza una ragione forte.
 
-## Pull-request completion checklist
+## Checklist di completamento delle pull request
 
-Every implementation PR should answer:
+Ogni PR di implementazione deve rispondere a queste domande:
 
-- What observable behavior changes?
-- Which invariant or interface is introduced?
-- How was it tested?
-- What failure cases were tested?
-- Does the design documentation need updating?
-- Does this change belong to a YouTube episode?
+- Quale comportamento osservabile cambia?
+- Quale invariante o interfaccia viene introdotta?
+- Come è stata testata?
+- Quali casi di errore sono stati provati?
+- La documentazione di progetto deve essere aggiornata?
+- La modifica appartiene a un episodio YouTube?
 
-Recommended checklist:
+Checklist consigliata:
 
 ```markdown
-- [ ] Debug build passes
-- [ ] Release build passes
-- [ ] Host-side tests pass
-- [ ] QEMU tests pass
-- [ ] Documentation updated
-- [ ] No unrelated generated files committed
-- [ ] Episode notes updated when applicable
+- [ ] Build debug completata
+- [ ] Build release completata
+- [ ] Test host completati
+- [ ] Test QEMU completati
+- [ ] Documentazione aggiornata
+- [ ] Nessun artefatto generato non correlato incluso
+- [ ] Note dell'episodio aggiornate, quando applicabile
 ```
 
-## Episode workflow
+## Flusso degli episodi
 
-Each episode uses a reproducible start and completion point.
+Ogni episodio usa un punto iniziale e finale riproducibile.
 
 ```text
-Issue:   Episode 03 — Incremental kernel build
-Branch:  episode/03-incremental-build
+Issue:   Episodio 03 — Build incrementale del kernel
+Branch:  episode/03-build-incrementale
 Tag:     ep03-start
 Tag:     ep03-complete
-Notes:   docs/episodes/03-incremental-build.md
+Note:    docs/episodes/03-build-incrementale.md
 ```
 
-Viewers should be able to run:
+Chi segue deve poter eseguire:
 
 ```bash
 git checkout ep03-start
 git diff ep03-start ep03-complete
 ```
 
-The video may show mistakes and debugging, while the final commit history should remain understandable.
+Il video può mostrare errori e debugging; la cronologia finale deve comunque restare comprensibile.
 
-## Definition of done
+## Definizione di completato
 
-A feature is complete only when:
+Una funzionalità è completa solo quando:
 
-1. the code compiles without new warnings;
-2. its expected behavior is observable;
-3. relevant tests pass;
-4. failure behavior is documented;
-5. public APIs are documented;
-6. the corresponding design document is updated;
-7. temporary debug code is removed or intentionally gated.
+1. compila senza nuovi warning;
+2. il comportamento atteso è osservabile;
+3. i test rilevanti passano;
+4. il comportamento in caso di errore è documentato;
+5. le API pubbliche sono documentate;
+6. il documento di design corrispondente è aggiornato;
+7. il codice di debug temporaneo è rimosso o protetto da un’opzione esplicita.
 
-## Review principles
+## Principi di revisione
 
-Reviews should focus on:
+Le review devono concentrarsi su:
 
-- initialization order;
-- ownership and lifetime;
-- integer overflow;
-- physical versus virtual address confusion;
-- interrupt safety;
-- reentrancy;
-- lock ordering;
-- user-pointer validation;
-- behavior during partial initialization;
-- testability and diagnostic quality.
+- ordine di inizializzazione;
+- proprietà e durata degli oggetti;
+- overflow interi;
+- confusione tra indirizzi fisici e virtuali;
+- sicurezza rispetto agli interrupt;
+- rientranza;
+- ordine dei lock;
+- validazione dei puntatori utente;
+- comportamento durante inizializzazioni parziali;
+- testabilità e qualità della diagnostica.
 
-## Generated files
+## File generati
 
-Build artifacts, disk images, dependency caches and downloaded toolchains are not committed unless explicitly required for a release artifact.
+Artefatti di build, immagini disco, cache e toolchain scaricate non vengono versionati, salvo espliciti artefatti di release.
 
-The repository should contain checksums and scripts that recreate external dependencies rather than mutable binary copies without provenance.
+Il repository deve contenere checksum e strumenti per ricreare le dipendenze esterne, non copie binarie mutevoli prive di provenienza.
 
-## Documentation maintenance
+## Manutenzione della documentazione
 
-Documentation is treated as part of the implementation. Architectural changes update the relevant document in the same PR.
+La documentazione fa parte dell’implementazione. Le modifiche architetturali aggiornano il documento pertinente nella stessa PR.
 
-Small local decisions may be documented in code. Decisions that affect multiple modules, the public ABI, the build system or the teaching sequence require an Architecture Decision Record.
+Le decisioni locali possono essere commentate nel codice. Le decisioni che coinvolgono più moduli, ABI pubblica, build system o percorso didattico richiedono una Architecture Decision Record.

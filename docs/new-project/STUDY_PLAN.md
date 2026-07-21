@@ -1,660 +1,416 @@
-# OS Development Study Plan
+# Piano di studio per lo sviluppo di sistemi operativi
 
-This study plan follows the project milestones. It is not a prerequisite wall: study and implementation should alternate. Each topic should be learned deeply enough to explain it, implement a minimal version and debug common failures.
+Questo piano segue le milestone del progetto. Non è un muro di prerequisiti: studio e implementazione devono alternarsi. Ogni argomento va compreso abbastanza da poterlo spiegare, implementare in forma minima e debuggare nei casi di errore più comuni.
 
-The implementation begins on **x86_64 in 64-bit mode**, while the study plan separates universal operating-system concepts from x86_64-specific mechanisms.
+L’implementazione parte da **x86_64 in modalità a 64 bit**, distinguendo sempre i concetti universali dei sistemi operativi dai meccanismi specifici della prima architettura.
 
-## Study method for every milestone
+## Metodo di studio per ogni milestone
 
-For each subject:
+Per ogni argomento:
 
-1. learn the architecture-neutral concept;
-2. identify the contract the kernel needs;
-3. study the x86_64 mechanism used for the first backend;
-4. implement the smallest observable version;
-5. create success and failure tests;
-6. explain the result without hiding bootloader or hardware assumptions;
-7. write down what would change on another architecture.
+1. studiare il concetto indipendente dall’architettura;
+2. identificare il contratto richiesto dal kernel;
+3. studiare il meccanismo x86_64 usato dal primo backend;
+4. implementare la versione minima osservabile;
+5. creare test di successo e di errore;
+6. spiegare il risultato senza nascondere assunzioni hardware o del bootloader;
+7. annotare cosa cambierebbe su un’altra architettura.
 
-Each learning unit should produce:
+Ogni unità produce:
 
-- [ ] concise personal notes;
-- [ ] a diagram;
-- [ ] a glossary;
-- [ ] one minimal experiment;
-- [ ] one failure experiment;
-- [ ] one YouTube episode outline;
-- [ ] references to primary documentation.
+- [ ] note personali concise;
+- [ ] un diagramma;
+- [ ] un glossario;
+- [ ] un esperimento minimo;
+- [ ] un esperimento di fallimento;
+- [ ] una scaletta per un episodio;
+- [ ] riferimenti a documentazione primaria.
 
 ---
 
-# Foundation A — Modern freestanding C23
+# Fondamenta A — C23 moderno freestanding
 
-## Learn
+## Studiare
 
-- translation units;
-- declarations and definitions;
-- object lifetime and storage duration;
-- integer conversion and promotion rules;
-- pointer arithmetic;
-- alignment and padding;
-- strict aliasing and effective types;
-- undefined, unspecified and implementation-defined behavior;
-- volatile semantics and its limitations;
-- atomics at a conceptual level;
-- freestanding versus hosted implementations;
-- compiler builtins and extensions;
-- calling conventions and ABI boundaries.
+- translation unit, dichiarazioni e definizioni;
+- durata e lifetime degli oggetti;
+- conversioni e promozioni intere;
+- aritmetica dei puntatori;
+- allineamento e padding;
+- strict aliasing ed effective type;
+- comportamento undefined, unspecified e implementation-defined;
+- semantica e limiti di `volatile`;
+- concetti base degli atomici;
+- ambiente hosted e freestanding;
+- builtin ed estensioni del compilatore;
+- calling convention e confini ABI.
 
-## C23 features to use deliberately
+## C23 da usare consapevolmente
 
 - `static_assert`;
-- standard attributes such as `[[noreturn]]`, `[[nodiscard]]` and `[[maybe_unused]]`;
-- fixed-underlying-type enums where compiler support is verified;
-- `nullptr` where supported by the selected compiler baseline;
-- binary literals where they improve bit-field explanations;
-- checked and explicit integer operations.
+- `[[noreturn]]`, `[[nodiscard]]`, `[[maybe_unused]]`;
+- enum con tipo sottostante fisso quando verificato;
+- `nullptr` quando supportato dalla baseline;
+- letterali binari quando chiariscono i bit;
+- operazioni intere esplicite e controllate.
 
-## Exercises
+## Esercizi
 
-- [ ] Inspect structure layout with `sizeof`, `alignof` and `offsetof`.
-- [ ] Write overflow-safe alignment helpers.
-- [ ] Implement `memset`, `memcpy`, `memmove`, `memcmp` and `strlen`.
-- [ ] Test overlapping memory moves.
-- [ ] Demonstrate why signed overflow is not a wrapping operation.
-- [ ] Compare generated assembly for `volatile` and non-volatile accesses.
-- [ ] Create a compiler abstraction header for attributes and barriers.
+- [ ] ispezionare layout con `sizeof`, `alignof` e `offsetof`;
+- [ ] scrivere helper di allineamento protetti da overflow;
+- [ ] implementare `memset`, `memcpy`, `memmove`, `memcmp`, `strlen`;
+- [ ] testare copie sovrapposte;
+- [ ] dimostrare perché l’overflow signed non è wrapping garantito;
+- [ ] confrontare assembly con e senza `volatile`;
+- [ ] creare un header di astrazione del compilatore.
 
-## Completion signal
-
-You can explain why code that looks correct in C may still be invalid for a kernel because of undefined behavior, ABI assumptions or optimizer transformations.
+**Segnale di completamento:** saper spiegare perché codice C apparentemente corretto può essere invalido in un kernel per UB, ABI o trasformazioni dell’ottimizzatore.
 
 ---
 
-# Foundation B — Computer architecture
-
-## Architecture-neutral topics
-
-- privilege levels;
-- instruction execution and pipeline basics;
-- registers and processor state;
-- interrupts and exceptions;
-- virtual and physical addresses;
-- caches and memory hierarchy;
-- memory ordering;
-- MMIO versus port IO;
-- DMA concept;
-- multiprocessor basics;
-- firmware and hardware-description mechanisms.
-
-## x86_64 focus
-
-- general-purpose registers;
-- `RIP`, `RSP`, `RFLAGS`;
-- long mode;
-- canonical addresses;
-- control registers;
-- model-specific registers;
-- GDT, TSS and IDT;
-- paging hierarchy;
-- CPUID;
-- APIC family;
-- `syscall/sysret` and `iretq`;
-- System V AMD64 calling convention as a reference, not an unquestioned kernel ABI.
-
-## Exercises
-
-- [ ] Read and annotate a register dump.
-- [ ] Decode a canonical virtual address.
-- [ ] Draw four-level x86_64 page translation.
-- [ ] Explain exception versus hardware interrupt.
-- [ ] Inspect CPUID output in a user-space experiment.
-- [ ] Step through a C function prologue and epilogue in GDB.
-
-## Completion signal
-
-You can follow a CPU from kernel entry to a C function and explain where the stack, instruction pointer, page tables and privilege state come from.
-
----
-
-# Foundation C — Toolchain, ELF and linking
-
-## Learn
-
-- preprocessing, compilation, assembly and linking;
-- object files;
-- symbols and relocations;
-- ELF headers, sections and program headers;
-- static versus dynamic linking;
-- linker scripts;
-- load memory address versus virtual memory address;
-- debug information;
-- symbol maps;
-- compiler-generated runtime helpers;
-- why freestanding code can still cause unresolved compiler builtins.
-
-## Exercises
-
-- [ ] Compile one C source to assembly.
-- [ ] Inspect an object with `readelf`, `llvm-readobj` and `objdump`.
-- [ ] Build a minimal ELF with a custom linker script.
-- [ ] Find entry point, sections and load segments.
-- [ ] Trigger and resolve a missing compiler-runtime symbol.
-- [ ] Generate and inspect a link map.
-
-## Completion signal
-
-You can explain exactly how source files become a loadable kernel ELF and how the bootloader finds its entry point.
-
----
-
-# M0 study — Build engineering
-
-## Architecture-neutral topics
-
-- dependency graphs;
-- incremental builds;
-- generated artifacts;
-- hermetic and reproducible builds;
-- build profiles;
-- cross compilation;
-- host tools versus target binaries;
-- dependency version pinning;
-- CI caching and artifact retention.
-
-## Tools
-
-- Meson;
-- Ninja;
-- Clang;
-- LLD;
-- Python only for orchestration tasks that Meson should not own;
-- QEMU;
-- GDB.
-
-## Exercises
-
-- [ ] Build two C translation units incrementally.
-- [ ] Verify automatic header dependencies.
-- [ ] Keep debug and release build directories side by side.
-- [ ] Generate `compile_commands.json`.
-- [ ] Time cold, incremental and no-op builds.
-- [ ] Reproduce the build in a clean container.
-
-## Questions to answer in the video
-
-- Why is deleting the build directory on every compilation inefficient?
-- What does Ninja know that a shell script does not?
-- Which programs run on the host, and which artifacts target the kernel machine?
-
----
-
-# M1 study — Firmware, boot and execution environment
-
-## Architecture-neutral topics
-
-- firmware responsibility;
-- bootloader responsibility;
-- kernel responsibility;
-- boot protocol contracts;
-- normalized boot information;
-- early initialization ordering;
-- stack requirements;
-- controlled halt and failure reporting.
-
-## x86_64 and UEFI topics
-
-- UEFI concept and EFI System Partition;
-- PE/COFF role for EFI applications;
-- Limine loading an ELF64 kernel;
-- long-mode assumptions supplied by the boot protocol;
-- initial memory map;
-- serial communication through legacy COM1 under QEMU.
-
-## Exercises
-
-- [ ] Boot a minimal kernel and stop at its entry symbol in GDB.
-- [ ] Inspect the initial stack pointer alignment.
-- [ ] Print normalized firmware and memory information.
-- [ ] Remove one mandatory boot response and verify controlled failure.
-- [ ] Compare UEFI boot with the conceptual legacy BIOS path.
-
-## Abstraction reflection
-
-Document what would change if the backend used ARM64 with UEFI or RISC-V with SBI/OpenSBI.
-
----
-
-# M2 study — Exceptions, interrupt frames and diagnostics
-
-## Architecture-neutral topics
-
-- synchronous exceptions;
-- asynchronous interrupts;
-- saved execution contexts;
-- reentrancy;
-- fatal versus recoverable faults;
-- panic design;
-- emergency logging;
-- stack unwinding fundamentals.
-
-## x86_64 topics
-
-- IDT gates;
-- exception vectors;
-- error-code exceptions;
-- privilege transitions;
-- TSS and IST;
-- `iretq` frame;
-- page-fault error code;
-- CR2;
-- double faults.
-
-## Exercises
-
-- [ ] Decode a manually constructed exception frame.
-- [ ] Trigger divide-by-zero, invalid opcode and page fault.
-- [ ] Verify the C and assembly context layouts using static assertions.
-- [ ] Generate a stack trace using frame pointers.
-- [ ] Trigger a nested failure and observe the emergency path.
-
-## Abstraction reflection
-
-Separate `exception_info` from the raw x86_64 interrupt frame. Record which fields are universal and which are platform-specific.
-
----
-
-# M3 study — Physical memory management
-
-## Architecture-neutral topics
-
-- physical memory ownership;
-- page frames;
-- firmware memory maps;
-- reserved, reclaimable and device memory;
-- fragmentation;
-- bitmap, free-list and buddy allocation;
-- contiguous allocation;
-- metadata placement;
-- ownership invariants.
-
-## x86_64 topics
-
-- 4 KiB base pages;
-- large-page awareness;
-- memory map supplied through Limine;
-- physical-address width discovery;
-- MMIO regions.
-
-## Exercises
-
-- [ ] Normalize overlapping synthetic memory maps.
-- [ ] Implement and host-test a bitmap allocator.
-- [ ] Allocate all pages and free them in randomized order.
-- [ ] Detect double free and unaligned free.
-- [ ] Compare bitmap and buddy tradeoffs without implementing buddy yet.
-
-## Abstraction reflection
-
-The PMM must know page size and physical limits through platform configuration, not through scattered constants.
-
----
-
-# M4 study — Virtual memory
-
-## Architecture-neutral topics
-
-- address spaces;
-- virtual-to-physical translation;
-- page permissions;
-- user/kernel separation;
-- demand versus eager mapping;
-- copy-on-write concept;
-- direct physical maps;
-- TLBs;
-- address-space switching;
-- guard pages;
-- executable versus writable memory.
-
-## x86_64 topics
-
-- PML4, PDPT, PD and PT;
-- canonical addresses;
-- page-table entry flags;
-- CR3;
-- NXE and NX;
-- `invlpg`;
-- PCID as a deferred optimization;
-- higher-half kernel design.
-
-## Exercises
-
-- [ ] Walk a virtual address by hand.
-- [ ] Implement map, resolve and unmap tests.
-- [ ] Test mappings across every table boundary.
-- [ ] Produce read-only and NX faults.
-- [ ] Destroy an address space and verify frame reclamation.
-- [ ] Add a guard page below a stack.
-
-## Abstraction reflection
-
-Generic VM flags should not reuse hardware bit positions. A backend must translate them.
-
----
-
-# M5 study — Dynamic allocation
-
-## Architecture-neutral topics
-
-- allocation semantics;
-- alignment;
-- fragmentation;
-- metadata corruption;
-- free lists;
-- boundary tags;
-- splitting and coalescing;
-- slab and object caches;
-- allocation context restrictions;
-- debug poisoning and canaries.
-
-## Exercises
-
-- [ ] Write a bump allocator.
-- [ ] Write and host-test an aligned free-list allocator.
-- [ ] Fuzz allocation/free sequences.
-- [ ] Measure fragmentation.
-- [ ] Compare free-list, buddy and slab use cases.
-- [ ] Verify integer-overflow handling in size calculations.
-
-## Abstraction reflection
-
-Keep heap policy separate from the VM mechanism that supplies pages.
-
----
-
-# M6 study — Hardware discovery, interrupts and clocks
-
-## Architecture-neutral topics
-
-- hardware-description tables;
-- interrupt controllers;
-- interrupt routing;
-- masking and acknowledgement;
-- edge versus level triggering;
-- clock sources;
-- clock events;
-- monotonic time;
-- calibration;
-- timer deadlines versus periodic ticks.
-
-## x86_64 topics
-
-- ACPI RSDP, XSDT and checksums;
-- MADT;
-- Local APIC;
-- IOAPIC;
-- legacy PIC;
-- LAPIC timer;
-- HPET and TSC concepts;
-- spurious interrupt vector.
-
-## Exercises
-
-- [ ] Parse synthetic ACPI tables with invalid lengths and checksums.
-- [ ] Draw interrupt routing from device to kernel handler.
-- [ ] Receive and acknowledge a timer interrupt.
-- [ ] Mask and unmask an interrupt source.
-- [ ] Compare clock source and clock event device.
-
-## Abstraction reflection
-
-Use controller and clock interfaces rather than naming APIC inside scheduler or generic time code.
-
----
-
-# M7 study — Concurrency and scheduling
-
-## Architecture-neutral topics
-
-- execution context;
-- kernel thread;
-- process versus thread;
-- cooperative and preemptive scheduling;
-- scheduling policies;
-- ready, blocked and terminated states;
-- race conditions;
-- critical sections;
-- interrupt disabling versus locks;
-- wait queues;
-- lifetime and reclamation.
-
-## x86_64 topics
-
-- context-switch register set;
-- stack switching;
-- ABI-preserved registers;
-- interrupt return into a selected context;
-- per-CPU concepts, even though SMP is deferred.
-
-## Exercises
-
-- [ ] Implement a host-side scheduler queue model.
-- [ ] Construct a new kernel-thread stack manually.
-- [ ] Switch cooperatively between two threads.
-- [ ] Add timer preemption.
-- [ ] Block and wake a thread.
-- [ ] Verify register preservation with known patterns.
-
-## Abstraction reflection
-
-The scheduler chooses a thread; architecture code performs the low-level context switch.
-
----
-
-# M8 study — Protection and user mode
-
-## Architecture-neutral topics
-
-- protection domains;
-- processes;
-- privilege separation;
-- kernel and user address ranges;
-- fault containment;
-- safe memory copying;
-- time-of-check/time-of-use issues;
-- process lifecycle.
-
-## x86_64 topics
-
-- Ring 0 and Ring 3;
-- segment selectors in long mode;
-- TSS `RSP0`;
-- user/supervisor page bit;
-- `iretq` transition;
-- SMAP/SMEP as later hardening features.
-
-## Exercises
-
-- [ ] Enter a user function.
-- [ ] Read the current privilege level.
-- [ ] Attempt a privileged instruction from user mode.
-- [ ] Attempt to modify a kernel page.
-- [ ] Safely terminate only the faulty process.
-- [ ] Test invalid ranges passed to copy helpers.
-
-## Abstraction reflection
-
-Model privilege as kernel/user execution domains rather than exposing x86 ring numbers to generic process code.
-
----
-
-# M9 study — System calls and ABI design
-
-## Architecture-neutral topics
-
-- syscall purpose;
-- ABI stability;
-- argument passing;
-- error conventions;
-- capability and permission checks;
-- pointer validation;
-- blocking syscalls;
-- restart semantics;
-- versioning.
-
-## x86_64 topics
-
-- `syscall/sysret` registers and MSRs;
-- `iretq` fallback path;
-- `swapgs` concept for future per-CPU state;
-- canonical return-address validation;
-- calling-convention differences between user ABI and syscall ABI.
-
-## Exercises
-
-- [ ] Write an ABI table for three syscalls.
-- [ ] Implement unknown-syscall handling.
-- [ ] Test bad pointers and extreme lengths.
-- [ ] Verify clobbered and preserved registers.
-- [ ] Trace a syscall from user stub to kernel and back.
-
-## Abstraction reflection
-
-The syscall semantic layer should not depend on the machine entry instruction.
-
----
-
-# M10 study — Archives, executable formats and process images
-
-## Architecture-neutral topics
-
-- byte-stream validation;
-- archive formats;
-- executable formats;
-- segments versus sections;
-- loader security;
-- integer overflow during parsing;
-- process image construction;
-- initial stack and argument conventions.
-
-## x86_64 topics
-
-- ELF64;
-- x86_64 machine identifier;
-- little-endian encoding;
-- loadable segments;
-- executable entry point;
-- static user binaries.
-
-## Exercises
-
-- [ ] Parse ELF64 host-side using only bounds-checked reads.
-- [ ] Reject malformed headers and overflowing offsets.
-- [ ] Map segments with correct permissions.
-- [ ] Zero BSS.
-- [ ] Build a tiny freestanding user program.
-- [ ] Load and run it from initramfs.
-
-## Abstraction reflection
-
-Keep the generic executable loader separate from the architecture-specific validation and initial CPU-context creation.
-
----
-
-# M11 study — Filesystems and VFS
-
-## Architecture-neutral topics
-
-- namespace;
-- path resolution;
-- files, directories and devices;
-- inode/vnode concepts;
-- mounts;
-- file handles and descriptors;
-- offsets;
-- filesystem operations;
-- caching and lifetime basics;
-- permissions as a later extension.
-
-## Exercises
-
-- [ ] Build a host-side in-memory VFS prototype.
-- [ ] Parse absolute paths safely.
-- [ ] Handle `.`, `..` and repeated separators.
-- [ ] Mount an initramfs root.
-- [ ] Implement independent file offsets.
-- [ ] Add a console device.
-
-## Abstraction reflection
-
-VFS clients must not know whether a file comes from TAR, FAT, ext2 or a device driver.
-
----
-
-# Deferred study tracks
-
-Study these only when the initial user-space cycle is stable.
-
-## Synchronization and SMP
-
-- atomic operations;
-- memory models;
-- spinlocks;
-- mutexes;
-- reader/writer locks;
-- per-CPU data;
-- inter-processor interrupts;
-- TLB shootdowns;
-- lock ordering;
-- deadlock detection.
-
-## Devices and buses
-
-- PCI/PCIe configuration;
-- MMIO;
+# Fondamenta B — Architettura dei calcolatori
+
+## Concetti generali
+
+- livelli di privilegio;
+- esecuzione delle istruzioni e basi della pipeline;
+- registri e stato del processore;
+- interrupt ed eccezioni;
+- indirizzi virtuali e fisici;
+- cache e gerarchia di memoria;
+- ordinamento della memoria;
+- MMIO e port I/O;
 - DMA;
-- MSI/MSI-X;
-- block-device abstraction;
-- AHCI or NVMe;
-- USB architecture.
+- basi del multiprocessore;
+- firmware e descrizione dell’hardware.
 
-## Persistent filesystems
+## Focus x86_64
 
-- block cache;
-- FAT or ext2;
-- consistency;
-- allocation maps;
-- directory structures;
-- crash behavior.
+- registri generali, `RIP`, `RSP`, `RFLAGS`;
+- long mode e indirizzi canonici;
+- control register e MSR;
+- GDT, TSS e IDT;
+- gerarchia del paging;
+- CPUID;
+- famiglia APIC;
+- `syscall/sysret` e `iretq`;
+- System V AMD64 ABI come riferimento, non come ABI kernel imposta.
+
+## Esercizi
+
+- [ ] leggere e annotare un dump dei registri;
+- [ ] decodificare un indirizzo canonico;
+- [ ] disegnare la traduzione a quattro livelli;
+- [ ] distinguere eccezione e interrupt hardware;
+- [ ] ispezionare CPUID da user space;
+- [ ] seguire prologo ed epilogo di una funzione in GDB.
+
+---
+
+# Fondamenta C — Toolchain, ELF e linking
+
+## Studiare
+
+- preprocessing, compilazione, assembly e link;
+- object file;
+- simboli e rilocazioni;
+- header, sezioni e program header ELF;
+- link statico e dinamico;
+- linker script;
+- indirizzo di caricamento e indirizzo virtuale;
+- informazioni di debug e map file;
+- helper runtime generati dal compilatore.
+
+## Esercizi
+
+- [ ] compilare C in assembly;
+- [ ] ispezionare oggetti con `readelf`, `llvm-readobj`, `objdump`;
+- [ ] costruire un ELF minimo con linker script;
+- [ ] individuare entry, sezioni e segmenti;
+- [ ] provocare e risolvere un simbolo runtime mancante;
+- [ ] generare e leggere una link map.
+
+---
+
+# Studio M0 — Ingegneria della build
+
+## Concetti
+
+Grafi delle dipendenze, build incrementali, artefatti generati, riproducibilità, profili, cross-compilazione, strumenti host e binari target, version pinning, cache CI.
+
+## Strumenti
+
+Meson, Ninja, Clang, LLD, Python solo per orchestrazione, QEMU e GDB.
+
+## Esercizi
+
+- [ ] compilare incrementalmente due translation unit;
+- [ ] verificare dipendenze automatiche dagli header;
+- [ ] mantenere debug e release affiancate;
+- [ ] generare `compile_commands.json`;
+- [ ] misurare build cold, incrementale e no-op;
+- [ ] riprodurre tutto in un container pulito.
+
+Domande da spiegare: perché cancellare la directory di build è inefficiente? Cosa conosce Ninja che uno script shell non conosce? Quali programmi girano sull’host e quali artefatti sono per il target?
+
+---
+
+# Studio M1 — Firmware, boot e ambiente di esecuzione
+
+## Concetti generali
+
+Responsabilità di firmware, bootloader e kernel; contratto di boot; normalizzazione delle informazioni; ordine dell’early init; requisiti dello stack; halt controllato.
+
+## Focus x86_64/UEFI
+
+UEFI ed EFI System Partition, ruolo PE/COFF, Limine e kernel ELF64, assunzioni del long mode, memory map iniziale, seriale COM1 in QEMU.
+
+## Esercizi
+
+- [ ] fermarsi all’entry point con GDB;
+- [ ] verificare l’allineamento iniziale dello stack;
+- [ ] stampare firmware e memoria normalizzati;
+- [ ] rimuovere una risposta obbligatoria e verificare l’errore controllato;
+- [ ] confrontare concettualmente UEFI e BIOS legacy.
+
+Riflessione: cosa cambierebbe con ARM64/UEFI o RISC-V/SBI?
+
+---
+
+# Studio M2 — Eccezioni, interrupt frame e diagnostica
+
+## Concetti generali
+
+Eccezioni sincrone, interrupt asincroni, contesti salvati, rientranza, fault recuperabili e fatali, panic, logging di emergenza, stack unwinding.
+
+## Focus x86_64
+
+Gate IDT, vettori, eccezioni con error code, transizioni di privilegio, TSS e IST, frame `iretq`, page-fault code, CR2 e double fault.
+
+## Esercizi
+
+- [ ] decodificare un frame costruito manualmente;
+- [ ] provocare divide-by-zero, invalid opcode e page fault;
+- [ ] verificare layout C/assembly con `static_assert`;
+- [ ] produrre uno stack trace con frame pointer;
+- [ ] testare un fallimento annidato.
+
+---
+
+# Studio M3 — Memoria fisica
+
+## Concetti
+
+Proprietà della memoria, frame, memory map firmware, regioni riservate o reclamabili, frammentazione, bitmap/free-list/buddy, allocazione contigua, metadati e invarianti.
+
+## Focus x86_64
+
+Pagine da 4 KiB, consapevolezza delle large page, map Limine, larghezza dell’indirizzo fisico e MMIO.
+
+## Esercizi
+
+- [ ] normalizzare mappe sintetiche sovrapposte;
+- [ ] implementare e testare un allocator bitmap;
+- [ ] allocare tutte le pagine e liberarle in ordine casuale;
+- [ ] rilevare double-free e free non allineato;
+- [ ] confrontare bitmap e buddy senza implementare subito buddy.
+
+---
+
+# Studio M4 — Memoria virtuale
+
+## Concetti
+
+Address space, traduzione, permessi, separazione kernel/utente, mapping eager e demand, copy-on-write come concetto, direct map, TLB, cambio address space, guard page, W^X.
+
+## Focus x86_64
+
+PML4/PDPT/PD/PT, indirizzi canonici, flag delle entry, CR3, NXE/NX, `invlpg`, PCID rimandato e kernel high-half.
+
+## Esercizi
+
+- [ ] attraversare manualmente un indirizzo virtuale;
+- [ ] implementare test map/resolve/unmap;
+- [ ] testare ogni confine delle tabelle;
+- [ ] provocare fault read-only e NX;
+- [ ] distruggere un address space verificando il rilascio dei frame;
+- [ ] aggiungere una guard page sotto uno stack.
+
+---
+
+# Studio M5 — Allocazione dinamica
+
+## Concetti
+
+Semantica di allocazione, allineamento, frammentazione, corruzione dei metadati, free list, boundary tag, splitting, coalescing, slab, contesti di allocazione, poisoning e canary.
+
+## Esercizi
+
+- [ ] bump allocator;
+- [ ] free-list allineata testata sull’host;
+- [ ] fuzz di sequenze alloc/free;
+- [ ] misura della frammentazione;
+- [ ] confronto tra free-list, buddy e slab;
+- [ ] verifica degli overflow nei calcoli delle dimensioni.
+
+---
+
+# Studio M6 — Scoperta hardware, interrupt e clock
+
+## Concetti
+
+Tabelle di descrizione, controller interrupt, routing, masking, acknowledgement, edge/level trigger, clock source, clock event, tempo monotono, calibrazione, deadline e tick periodico.
+
+## Focus x86_64
+
+ACPI RSDP/XSDT e checksum, MADT, LAPIC, IOAPIC, PIC legacy, timer LAPIC, HPET e TSC, vettore spurio.
+
+## Esercizi
+
+- [ ] analizzare tabelle ACPI sintetiche malformate;
+- [ ] disegnare il percorso device→handler;
+- [ ] ricevere e riconoscere un timer interrupt;
+- [ ] mask/unmask di una sorgente;
+- [ ] distinguere clock source e clock event.
+
+---
+
+# Studio M7 — Concorrenza e scheduling
+
+## Concetti
+
+Contesto di esecuzione, thread e processo, scheduling cooperativo/preemptive, stati, race, sezioni critiche, interrupt disabling e lock, wait queue, lifetime e reclamazione.
+
+## Focus x86_64
+
+Set di registri del context switch, cambio stack, registri preservati dall’ABI, ritorno da interrupt, concetti per-CPU pur rimandando SMP.
+
+## Esercizi
+
+- [ ] modello host-side della ready queue;
+- [ ] costruzione manuale dello stack di un nuovo thread;
+- [ ] switch cooperativo tra due thread;
+- [ ] preemption da timer;
+- [ ] block/wake;
+- [ ] verifica dei registri con pattern noti.
+
+---
+
+# Studio M8 — Protezione e modalità utente
+
+## Concetti
+
+Domini di protezione, processi, separazione dei privilegi, range kernel/utente, contenimento dei fault, copie sicure, TOCTOU e ciclo di vita.
+
+## Focus x86_64
+
+Ring 0/Ring 3, selector in long mode, `RSP0`, bit user/supervisor, `iretq`, SMEP/SMAP come hardening futuro.
+
+## Esercizi
+
+- [ ] entrare in una funzione utente;
+- [ ] verificare il livello di privilegio;
+- [ ] tentare un’istruzione privilegiata;
+- [ ] tentare di modificare una pagina kernel;
+- [ ] terminare solo il processo colpevole;
+- [ ] testare range invalidi nei copy helper.
+
+---
+
+# Studio M9 — Syscall e design ABI
+
+## Concetti
+
+Scopo delle syscall, stabilità ABI, passaggio argomenti, convenzioni degli errori, permessi, puntatori utente, syscall bloccanti, restart e versioning.
+
+## Focus x86_64
+
+Registri e MSR di `syscall/sysret`, fallback `iretq`, concetto di `swapgs`, validazione dell’indirizzo di ritorno, differenza tra ABI utente e ABI syscall.
+
+## Esercizi
+
+- [ ] tabella ABI per tre syscall;
+- [ ] syscall sconosciuta;
+- [ ] puntatori errati e lunghezze estreme;
+- [ ] registri clobbered e preservati;
+- [ ] tracing completo user→kernel→user.
+
+---
+
+# Studio M10 — Archivi, ELF e immagini di processo
+
+## Concetti
+
+Validazione di byte stream, archivi, formati eseguibili, segmenti e sezioni, sicurezza del loader, overflow nel parsing, immagine del processo e stack iniziale.
+
+## Focus x86_64
+
+ELF64, machine identifier x86_64, little endian, segmenti loadable, entry point e binari statici.
+
+## Esercizi
+
+- [ ] parser ELF64 host-side con letture bounds-checked;
+- [ ] rifiuto di header malformati e offset in overflow;
+- [ ] mapping con permessi corretti;
+- [ ] azzeramento BSS;
+- [ ] piccolo programma freestanding utente;
+- [ ] caricamento ed esecuzione da initramfs.
+
+---
+
+# Studio M11 — Filesystem e VFS
+
+## Concetti
+
+Namespace, path resolution, file, directory e device, inode/vnode, mount, file handle e descriptor, offset, operazioni del filesystem, lifetime e caching di base.
+
+## Esercizi
+
+- [ ] prototipo VFS in memoria sull’host;
+- [ ] parser sicuro dei percorsi assoluti;
+- [ ] gestione di `.`, `..` e separatori ripetuti;
+- [ ] mount root dell’initramfs;
+- [ ] offset indipendenti;
+- [ ] device console.
+
+---
+
+# Percorsi rimandati
+
+## Sincronizzazione e SMP
+
+Atomici, memory model, spinlock, mutex, reader/writer lock, dati per-CPU, IPI, TLB shootdown, ordine dei lock e deadlock.
+
+## Device e bus
+
+PCI/PCIe, MMIO, DMA, MSI/MSI-X, block device, AHCI/NVMe e USB.
+
+## Filesystem persistenti
+
+Block cache, FAT/ext2, consistenza, bitmap di allocazione, directory e comportamento dopo crash.
 
 ## Networking
 
-- NIC drivers;
-- Ethernet;
-- ARP;
-- IPv4/IPv6;
-- routing;
-- UDP and TCP;
-- socket abstraction.
+Driver NIC, Ethernet, ARP, IPv4/IPv6, routing, UDP/TCP e socket.
 
-## Second architecture validation
+## Seconda architettura
 
-After the generic contracts are stable, use a small second backend to test them. ARM64 or RISC-V are candidates, but the purpose is to validate abstractions, not to promise immediate feature parity.
+Dopo la stabilizzazione dei contratti generici, un backend minimo ARM64 o RISC-V dovrà validarli senza promettere parità immediata di funzionalità.
 
 ---
 
-# Recommended primary references
+# Riferimenti primari consigliati
 
-Prefer primary sources and specifications over tutorial copying:
+Preferire specifiche e documentazione primaria:
 
-- ISO C language material and compiler documentation;
+- materiale ISO C e documentazione dei compilatori;
 - System V AMD64 ABI;
-- Intel or AMD architecture manuals;
-- UEFI specification;
-- Limine protocol documentation;
-- ELF specification;
-- ACPI specification;
-- Meson and Ninja documentation;
-- QEMU and GDB manuals.
+- manuali Intel o AMD;
+- specifica UEFI;
+- documentazione del protocollo Limine;
+- specifica ELF;
+- specifica ACPI;
+- documentazione Meson e Ninja;
+- manuali QEMU e GDB.
 
-Secondary resources are useful for intuition, but each hardware-sensitive implementation should ultimately be checked against an authoritative specification.
+Le risorse secondarie sono utili per l’intuizione, ma ogni implementazione sensibile all’hardware deve essere verificata contro una fonte autorevole.

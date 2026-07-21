@@ -1,216 +1,216 @@
-# YouTube Series Plan
+# Piano della serie YouTube
 
-## Series purpose
+## Scopo della serie
 
-The series documents the construction of a modern educational x86_64 operating system from an empty repository to the execution of user-space programs.
+La serie documenta la costruzione di un sistema operativo educativo moderno x86_64, da un repository vuoto fino all’esecuzione di programmi nello spazio utente.
 
-The audience should learn both operating-system concepts and the engineering process used to build, debug and test low-level software.
+Il pubblico deve apprendere sia i concetti dei sistemi operativi sia il processo ingegneristico usato per costruire, debuggare e testare software low-level.
 
-## Episode structure
+## Struttura degli episodi
 
-Each episode should contain:
+Ogni episodio deve contenere:
 
-1. the problem being solved;
-2. the theory required to understand it;
-3. the design chosen for the project;
-4. implementation in small steps;
-5. at least one failure or diagnostic path;
-6. an observable result;
-7. a test;
-8. a start and completion tag.
+1. il problema da risolvere;
+2. la teoria necessaria;
+3. il design scelto;
+4. l’implementazione per piccoli passi;
+5. almeno un percorso di errore o diagnostica;
+6. un risultato osservabile;
+7. un test;
+8. un tag iniziale e uno finale.
 
-Recommended duration is flexible. Topics should not be stretched or compressed merely to match a fixed video length.
+La durata è flessibile. Gli argomenti non devono essere allungati o compressi solo per rispettare una durata prefissata.
 
-## Season 0 — Foundations and build system
+## Stagione 0 — Fondamenta e sistema di build
 
-### Episode 0 — Why build another operating system?
+### Episodio 0 — Perché costruire un altro sistema operativo?
 
-- lessons learned from Zone OS;
-- scope and non-goals;
+- lezioni apprese da Zone OS;
+- ambito e non-obiettivi;
 - roadmap;
-- educational repository strategy.
+- strategia didattica del repository.
 
-Result: project vision and initial repository.
+**Risultato:** visione del progetto e repository iniziale.
 
-### Episode 1 — Hosted and freestanding C
+### Episodio 1 — C hosted e freestanding
 
-- what an operating system kernel is;
-- hosted versus freestanding execution;
-- why C23;
-- what the compiler does and does not provide.
+- cos’è un kernel;
+- esecuzione hosted e freestanding;
+- perché C23;
+- cosa fornisce e cosa non fornisce il compilatore.
 
-Result: first freestanding object file.
+**Risultato:** primo object file freestanding.
 
-### Episode 2 — Cross-compilation with Clang
+### Episodio 2 — Cross-compilazione con Clang
 
-- target triples;
-- ABI assumptions;
-- compiler flags;
-- red zone and code model;
-- inspecting generated object files.
+- target triple;
+- assunzioni ABI;
+- flag del compilatore;
+- red zone e code model;
+- ispezione degli object file generati.
 
-Result: verified x86_64 kernel objects.
+**Risultato:** object file kernel x86_64 verificati.
 
-### Episode 3 — Meson and Ninja
+### Episodio 3 — Meson e Ninja
 
-- build graphs;
-- incremental compilation;
-- header dependencies;
-- debug and release profiles;
-- why Zone OS rebuilt too much.
+- grafi di build;
+- compilazione incrementale;
+- dipendenze dagli header;
+- profili debug e release;
+- perché Zone OS ricompilava troppo.
 
-Result: fast incremental kernel build.
+**Risultato:** build incrementale rapida del kernel.
 
-### Episode 4 — Linking a kernel ELF
+### Episodio 4 — Link di un kernel ELF
 
-- sections;
-- symbols;
+- sezioni;
+- simboli;
 - linker script;
-- virtual and physical addresses;
-- map files and ELF inspection.
+- indirizzi virtuali e fisici;
+- map file e ispezione ELF.
 
-Result: valid kernel ELF.
+**Risultato:** kernel ELF valido.
 
-### Episode 5 — Limine and UEFI image
+### Episodio 5 — Limine e immagine UEFI
 
-- firmware and bootloaders;
-- Limine protocol;
-- staging tree;
-- reproducible UEFI image.
+- firmware e bootloader;
+- protocollo Limine;
+- albero di staging;
+- immagine UEFI riproducibile.
 
-Result: QEMU transfers control to the kernel.
+**Risultato:** QEMU trasferisce il controllo al kernel.
 
-### Episode 6 — QEMU, serial and GDB
+### Episodio 6 — QEMU, seriale e GDB
 
-- serial output;
-- QEMU options;
-- GDB remote debugging;
-- breakpoints and register inspection.
+- output seriale;
+- opzioni QEMU;
+- debugging remoto GDB;
+- breakpoint e ispezione dei registri.
 
-Result: debuggable controlled boot.
+**Risultato:** boot controllato e debuggabile.
 
-## Season 1 — CPU foundations
+## Stagione 1 — Fondamenta della CPU
 
-Topics:
+Argomenti:
 
-- kernel entry and boot response validation;
-- logging and panic;
-- x86_64 execution environment;
+- entry point e validazione delle risposte di boot;
+- logging e panic;
+- ambiente di esecuzione x86_64;
 - GDT;
 - TSS;
 - IDT;
-- CPU exception stubs;
-- interrupt frames;
-- page-fault diagnostics;
-- stack tracing.
+- stub delle eccezioni CPU;
+- interrupt frame;
+- diagnostica dei page fault;
+- stack trace.
 
-Season result: deliberate CPU faults produce reliable diagnostic reports.
+**Risultato della stagione:** fault CPU intenzionali producono report diagnostici affidabili.
 
-## Season 2 — Memory management
+## Stagione 2 — Gestione della memoria
 
-Topics:
+Argomenti:
 
-- physical memory map;
-- page terminology;
-- reserved regions;
-- bitmap PMM;
-- x86_64 page tables;
-- high-half kernel;
+- memory map fisica;
+- terminologia delle pagine;
+- regioni riservate;
+- PMM bitmap;
+- page table x86_64;
+- kernel high-half;
 - direct map;
-- mapping APIs;
-- NX and permissions;
-- early allocator;
-- kernel heap.
+- API di mapping;
+- NX e permessi;
+- allocator iniziale;
+- heap kernel.
 
-Season result: tested physical allocation, virtual mappings and dynamic kernel memory.
+**Risultato:** allocazione fisica, mapping virtuali e memoria dinamica testati.
 
-## Season 3 — Interrupts and scheduling
+## Stagione 3 — Interrupt e scheduling
 
-Topics:
+Argomenti:
 
-- legacy PIC and APIC concepts;
-- local APIC;
+- PIC legacy e APIC;
+- Local APIC;
 - IOAPIC;
-- timers;
-- interrupt-safe code;
-- thread representation;
+- timer;
+- codice interrupt-safe;
+- rappresentazione dei thread;
 - context switching;
-- ready queues;
+- ready queue;
 - idle thread;
 - preemption;
-- synchronization basics.
+- basi della sincronizzazione.
 
-Season result: multiple kernel threads run preemptively.
+**Risultato:** più thread kernel vengono eseguiti in modo preemptive.
 
-## Season 4 — User space
+## Stagione 4 — Spazio utente
 
-Topics:
+Argomenti:
 
-- privilege rings;
-- user address spaces;
-- user stacks;
-- transitions to Ring 3;
-- safe user-memory access;
-- syscall ABI;
-- `write`, `exit` and `yield`;
-- process lifecycle.
+- livelli di privilegio;
+- address space utente;
+- stack utente;
+- transizione a Ring 3;
+- accesso sicuro alla memoria utente;
+- ABI syscall;
+- `write`, `exit` e `yield`;
+- ciclo di vita dei processi.
 
-Season result: a user program prints text through a syscall and exits.
+**Risultato:** un programma utente stampa tramite syscall e termina.
 
-## Season 5 — Programs and files
+## Stagione 5 — Programmi e file
 
-Topics:
+Argomenti:
 
 - initramfs;
-- TAR format;
-- ELF64 program loading;
-- virtual filesystem concepts;
-- vnode and file descriptors;
-- console device;
-- initial process;
-- simple command execution.
+- formato TAR;
+- caricamento ELF64;
+- concetti VFS;
+- vnode e file descriptor;
+- dispositivo console;
+- processo iniziale;
+- esecuzione semplice di comandi.
 
-Season result: multiple user programs are loaded from the initramfs.
+**Risultato:** più programmi utente vengono caricati dall’initramfs.
 
-## Supporting material
+## Materiale di supporto
 
-Each episode should publish:
+Ogni episodio deve pubblicare:
 
-- episode notes;
-- diagrams where useful;
-- commands shown in the video;
-- references;
-- start and completion tags;
-- test instructions;
-- known limitations;
-- optional exercises.
+- note;
+- diagrammi quando utili;
+- comandi mostrati nel video;
+- riferimenti;
+- tag iniziale e finale;
+- istruzioni di test;
+- limitazioni note;
+- esercizi facoltativi.
 
-Suggested note template:
+Template consigliato:
 
 ```markdown
-# Episode NN — Title
+# Episodio NN — Titolo
 
-## Learning objectives
-## Starting point
-## Concepts
-## Implementation steps
-## Commands
-## Tests
-## Common errors
-## Exercises
-## Final state
+## Obiettivi di apprendimento
+## Punto di partenza
+## Concetti
+## Passi di implementazione
+## Comandi
+## Test
+## Errori comuni
+## Esercizi
+## Stato finale
 ```
 
-## Teaching principles
+## Principi didattici
 
-- Never hide a required compiler or linker flag without explaining it.
-- Distinguish hardware rules, ABI rules, compiler behavior and project conventions.
-- Explain undefined behavior when it affects kernel code.
-- Show how to inspect binaries with tools rather than treating the build as magic.
-- Prefer diagrams for stack layouts, page tables and transitions.
-- Keep old episode tags buildable whenever practical.
-- Correct mistakes publicly in documentation and follow-up notes.
+- Non nascondere un flag del compilatore o linker senza spiegarlo.
+- Distinguere regole hardware, ABI, comportamento del compilatore e convenzioni del progetto.
+- Spiegare l’undefined behavior quando influenza il kernel.
+- Mostrare come ispezionare i binari invece di trattare la build come magia.
+- Preferire diagrammi per stack, page table e transizioni.
+- Mantenere compilabili i tag dei vecchi episodi quando praticabile.
+- Correggere pubblicamente gli errori nella documentazione e nelle note successive.
 
-## Community workflow
+## Flusso della community
 
-Questions and corrections should be directed to GitHub Discussions or episode-specific issues once the new repository supports them. Bugs should include the episode tag, host environment, command used and serial output.
+Domande e correzioni dovranno essere indirizzate alle GitHub Discussions o alle issue specifiche degli episodi quando il nuovo repository le supporterà. Le segnalazioni di bug devono includere tag dell’episodio, ambiente host, comando eseguito e output seriale.

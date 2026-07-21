@@ -1,81 +1,81 @@
-# New OS Project — Documentation
+# Nuovo progetto OS — Documentazione
 
-This directory contains the initial design documents for a new educational operating-system project built from scratch after Zone OS.
+Questa directory contiene i documenti iniziali di progettazione di un nuovo sistema operativo educativo costruito da zero dopo Zone OS.
 
-The project has two equal goals:
+Il progetto ha due obiettivi di pari importanza:
 
-1. build a small, understandable and progressively testable 64-bit operating system;
-2. produce a complete Italian YouTube series that explains every important technical decision.
+1. costruire un sistema operativo a 64 bit piccolo, comprensibile e verificabile in modo progressivo;
+2. produrre una serie completa di video YouTube in italiano che spieghi ogni decisione tecnica importante.
 
-The first implementation target is x86_64, but architecture-specific mechanisms must remain behind small, explicit interfaces. Portability is treated as a design discipline rather than an immediate promise of multiple complete backends.
+La prima implementazione è destinata a x86_64, ma i meccanismi specifici dell’architettura devono rimanere dietro interfacce piccole ed esplicite. La portabilità viene trattata come disciplina progettuale, non come promessa immediata di più backend completi.
 
-## Documents
+## Documenti
 
-### Direction and architecture
+### Direzione e architettura
 
-- [Vision and goals](VISION.md)
-- [Architecture](ARCHITECTURE.md)
-- [Portability and abstraction strategy](PORTABILITY_AND_ABSTRACTION.md)
-- [Architecture decision records](DECISIONS.md)
+- [Visione e obiettivi](VISION.md)
+- [Architettura](ARCHITECTURE.md)
+- [Strategia di portabilità e astrazione](PORTABILITY_AND_ABSTRACTION.md)
+- [Decisioni architetturali](DECISIONS.md)
 
-### Planning and learning
+### Pianificazione e apprendimento
 
-- [Roadmap and milestones](ROADMAP.md)
-- [Detailed milestone goals and checklists](MILESTONES_DETAILED.md)
-- [OS development study plan](STUDY_PLAN.md)
-- [YouTube series plan](YOUTUBE_SERIES.md)
+- [Roadmap e milestone](ROADMAP.md)
+- [Obiettivi dettagliati e checklist delle milestone](MILESTONES_DETAILED.md)
+- [Piano di studio per lo sviluppo OS](STUDY_PLAN.md)
+- [Piano della serie YouTube](YOUTUBE_SERIES.md)
 
-### Engineering process
+### Processo ingegneristico
 
-- [Build system](BUILD_SYSTEM.md)
-- [C23 language policy](C23_POLICY.md)
-- [Development workflow](DEVELOPMENT_WORKFLOW.md)
-- [Testing strategy](TESTING.md)
+- [Sistema di build](BUILD_SYSTEM.md)
+- [Politica del linguaggio C23](C23_POLICY.md)
+- [Flusso di sviluppo](DEVELOPMENT_WORKFLOW.md)
+- [Strategia di test](TESTING.md)
 
-## Working principles
+## Principi operativi
 
-- Correctness before features.
-- Observability before complexity.
-- One testable result per milestone.
-- One focused change per pull request.
-- The repository must remain understandable from the first episode to the latest one.
-- Every major decision must be documented.
-- The build must be incremental, reproducible and easy to explain.
-- Generic code must not manipulate x86_64 registers or hardware formats directly.
-- Architecture abstractions must be driven by real requirements, not speculative portability.
-- Every milestone includes a study track, success tests and deliberate failure tests.
+- Correttezza prima delle funzionalità.
+- Osservabilità prima della complessità.
+- Un risultato verificabile per ogni milestone.
+- Una modifica focalizzata per ogni pull request.
+- Il repository deve restare comprensibile dal primo episodio all’ultimo.
+- Ogni decisione importante deve essere documentata.
+- La build deve essere incrementale, riproducibile e facile da spiegare.
+- Il codice generico non deve manipolare direttamente registri o formati hardware x86_64.
+- Le astrazioni devono derivare da requisiti reali, non da portabilità speculativa.
+- Ogni milestone include un percorso di studio, test di successo e test deliberati di errore.
 
-## Initial technical direction
+## Direzione tecnica iniziale
 
-- Architecture: x86_64, 64-bit mode only.
-- Architecture strategy: generic kernel contracts with an initial x86_64 backend.
-- Boot protocol: Limine adapter feeding kernel-owned boot information.
-- Initial firmware target: UEFI.
-- Kernel design: monolithic but modular.
-- Language: ISO C23, freestanding.
-- Compiler: Clang as primary compiler.
+- Architettura: x86_64, esclusivamente modalità a 64 bit.
+- Strategia: contratti kernel generici con backend iniziale x86_64.
+- Protocollo di boot: adapter Limine che produce informazioni di boot possedute dal kernel.
+- Firmware iniziale: UEFI.
+- Design del kernel: monolitico ma modulare.
+- Linguaggio: ISO C23 freestanding.
+- Compilatore principale: Clang.
 - Linker: LLD.
-- Build system: Meson and Ninja.
-- Emulator: QEMU.
+- Build system: Meson e Ninja.
+- Emulatore: QEMU.
 - Debugger: GDB.
-- Primary diagnostic output: serial console.
-- Container usage: optional for development, required for reproducible CI images.
+- Diagnostica primaria: console seriale.
+- Container: opzionale nello sviluppo, richiesto come ambiente riproducibile di riferimento in CI.
 
-## Initial milestone sequence
+## Sequenza iniziale delle milestone
 
-1. Reproducible 64-bit workspace.
-2. Controlled UEFI boot.
-3. Diagnostics and CPU exceptions.
-4. Physical memory ownership.
-5. Virtual address spaces.
-6. Kernel dynamic memory.
-7. Interrupt delivery and time.
-8. Kernel threads and scheduling.
-9. User execution domain.
-10. System-call boundary.
-11. Initramfs and ELF64 program loading.
-12. Minimal VFS.
+1. Workspace a 64 bit riproducibile.
+2. Boot UEFI controllato.
+3. Diagnostica ed eccezioni CPU.
+4. Proprietà della memoria fisica.
+5. Spazi di indirizzamento virtuale.
+6. Memoria dinamica del kernel.
+7. Consegna degli interrupt e gestione del tempo.
+8. Thread kernel e scheduling.
+9. Dominio di esecuzione utente.
+10. Confine delle chiamate di sistema.
+11. Initramfs e caricamento di programmi ELF64.
+12. VFS minimale.
 
-Each milestone has detailed deliverables, verification checklists and exit criteria in [MILESTONES_DETAILED.md](MILESTONES_DETAILED.md). The associated knowledge path is defined in [STUDY_PLAN.md](STUDY_PLAN.md).
+Ogni milestone possiede deliverable, checklist di verifica e criteri d’uscita in [MILESTONES_DETAILED.md](MILESTONES_DETAILED.md). Il percorso di conoscenze associato è definito in [STUDY_PLAN.md](STUDY_PLAN.md).
 
-This documentation is intentionally stored in Zone OS temporarily. The final project should live in a separate repository once its name and repository are created.
+Questa documentazione è conservata temporaneamente in Zone OS. Il progetto definitivo dovrà vivere in un repository separato dopo la scelta del nome e la creazione del repository.
