@@ -25,6 +25,7 @@ Il kernel segue una strategia **ibrida evolutiva**: parte come monolitico modula
 
 - [Roadmap e milestone](ROADMAP.md)
 - [Obiettivi dettagliati e checklist delle milestone](MILESTONES_DETAILED.md)
+- [Roadmap delle API per milestone](API_ROADMAP.md)
 - [Piano di studio per lo sviluppo OS](STUDY_PLAN.md)
 - [Piano della serie YouTube](YOUTUBE_SERIES.md)
 
@@ -47,6 +48,7 @@ Il kernel segue una strategia **ibrida evolutiva**: parte come monolitico modula
 - Il codice generico non deve manipolare direttamente registri o formati hardware x86_64.
 - Le astrazioni devono derivare da requisiti reali, non da portabilità speculativa.
 - Ogni milestone include un percorso di studio, test di successo e test deliberati di errore.
+- Ogni milestone definisce prima dell'implementazione le API pubbliche previste, con firme, ownership, errori e test richiesti.
 - Le strutture interne dei sottosistemi sono private e vengono esposte tramite tipi opachi.
 - Le API candidate a diventare remote usano handle, errori stabili e buffer con ownership esplicita.
 - Un servizio deve poter avere un backend locale e, in seguito, un proxy IPC con la stessa semantica.
@@ -85,6 +87,6 @@ Il kernel segue una strategia **ibrida evolutiva**: parte come monolitico modula
 13. VFS minimale con backend locale sostituibile.
 14. Primo servizio user space sperimentale.
 
-Ogni milestone possiede deliverable, checklist di verifica e criteri d’uscita in [MILESTONES_DETAILED.md](MILESTONES_DETAILED.md). Il percorso di conoscenze associato è definito in [STUDY_PLAN.md](STUDY_PLAN.md).
+Ogni milestone possiede deliverable, checklist di verifica e criteri d’uscita in [MILESTONES_DETAILED.md](MILESTONES_DETAILED.md). Le firme previste sono raccolte in [API_ROADMAP.md](API_ROADMAP.md), mentre il percorso di conoscenze associato è definito in [STUDY_PLAN.md](STUDY_PLAN.md).
 
 Questa documentazione è conservata temporaneamente in Zone OS. Il progetto definitivo dovrà vivere in un repository separato dopo la scelta del nome e la creazione del repository.
